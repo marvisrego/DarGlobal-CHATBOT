@@ -14,6 +14,7 @@ const main = document.querySelector("main");
 const phone = matchMedia("(max-width: 720px)");
 const composerArea = byId("composer-area");
 const storageKey = "darglobal-property-chat-v1";
+const captureLine = /^Captured \d{4}-\d{2}-\d{2}T\S+$/;
 const pending = new Map();
 const live = document.body.dataset.mode === "live";
 const pendingMessage = live
@@ -124,7 +125,9 @@ function renderListingCards(cards) {
   for (const card of cards) {
     const item = element("li", "listing-card");
     item.append(element("h3", "", card.title));
-    for (const line of card.lines) item.append(element("p", "", line));
+    for (const line of card.lines) {
+      if (!captureLine.test(line)) item.append(element("p", "", line));
+    }
     item.append(renderSources({ sources: [card.source] }));
     list.append(item);
   }
@@ -148,7 +151,8 @@ function renderConversation({ scroll = false, reveal = null } = {}) {
     reply.append(element("h2", "", "Research assistant"));
     if (turn.response) {
       const cards = turn.response.listing_cards;
-      const text = cards?.length ? turn.response.listing_intro : turn.response.answer;
+      const text = cards?.length ? turn.response.listing_intro
+        : turn.response.answer.split("\n").filter((line) => !captureLine.test(line)).join("\n");
       for (const paragraph of text.split(/\n\s*\n/)) {
         const bullets = paragraph.trim().split("\n").map((line) => line.match(/^[-*•]\s+(.+)$/));
         if (bullets.every(Boolean)) {
