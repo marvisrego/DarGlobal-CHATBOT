@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from answers import (
     DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL, DAR_WEB_METHOD,
-    OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, Evidence, Source,
+    OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, Evidence, ListingCard, Source,
 )
 from corpus_snapshot import live_snapshot
 
@@ -71,6 +71,9 @@ class SearchResult:
     retrieval_path: str = "jsonl"
     evidence: list[Evidence] = field(default_factory=list)
     required_notes: list[str] = field(default_factory=list)
+    listing_cards: list[ListingCard] = field(default_factory=list)
+    listing_context: object | None = None
+    listing_followup: str | None = None
 
 
 def normalized(text):
