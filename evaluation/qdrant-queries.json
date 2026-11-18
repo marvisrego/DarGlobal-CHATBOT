@@ -1,0 +1,38 @@
+[
+  {
+    "id": "paperwork-paraphrase",
+    "kind": "paraphrase",
+    "question": "Which official paperwork proves the seller owns the home and the building was approved?",
+    "expected": ["guide:buyer-checks"]
+  },
+  {
+    "id": "commute-paraphrase",
+    "kind": "paraphrase",
+    "question": "Should I do a trial drive during rush hour before committing to a Riyadh rental?",
+    "expected": ["guide:expat-commute"]
+  },
+  {
+    "id": "remote-paraphrase",
+    "kind": "paraphrase",
+    "question": "Who can take care of repairs and cleaning if I live overseas?",
+    "expected": ["guide:remote-services"]
+  },
+  {
+    "id": "tierra-typo",
+    "kind": "misspelling",
+    "question": "Where is Tiera Viva?",
+    "expected": ["project:tierra-viva"]
+  },
+  {
+    "id": "astera-typo",
+    "kind": "misspelling",
+    "question": "Where is Asteera?",
+    "expected": ["project:astera"]
+  },
+  {
+    "id": "les-vagues-typo",
+    "kind": "misspelling",
+    "question": "Where is Les Vauges?",
+    "expected": ["project:les-vagues"]
+  }
+]

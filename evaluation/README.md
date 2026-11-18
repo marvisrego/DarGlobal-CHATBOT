@@ -1,5 +1,8 @@
 # Expanded corpus evaluation
 
+See the [Qdrant evaluation](qdrant.md) for the vector search comparison on the
+same 15 questions and six additional paraphrases and misspellings.
+
 ## Coverage
 
 - 11 distinct DarGlobal projects in eight locations across six countries. Each
