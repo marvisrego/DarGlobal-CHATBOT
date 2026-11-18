@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -7,6 +8,7 @@ from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StringConstraints
+from starlette.concurrency import run_in_threadpool
 
 from answers import ChatReply
 from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, OpenRouterAnswerProvider
@@ -21,6 +23,15 @@ if CHAT_MODE not in {"mock", "live"}:
 DATA_MODE = os.getenv("PROPERTY_DATA_MODE", "fixture").strip().lower()
 if DATA_MODE not in {"fixture", "live"}:
     raise RuntimeError("PROPERTY_DATA_MODE must be fixture or live.")
+RETRIEVAL_MODE = os.getenv("PROPERTY_RETRIEVAL_MODE", "jsonl").strip().lower()
+if RETRIEVAL_MODE not in {"jsonl", "hybrid"}:
+    raise RuntimeError("PROPERTY_RETRIEVAL_MODE must be jsonl or hybrid.")
+
+vector_lookup = None
+if RETRIEVAL_MODE == "hybrid" and DATA_MODE == "live":
+    from hybrid_retrieval import HybridLookup
+
+    vector_lookup = HybridLookup()
 
 ranker = None
 if CHAT_MODE == "live":
@@ -29,7 +40,17 @@ if CHAT_MODE == "live":
         raise RuntimeError("Set OPENROUTER_API_KEY in .env before enabling live mode.")
     ranker = OpenRouterAnswerProvider(key)
 
-app = FastAPI(title="Property Research Assistant")
+
+@asynccontextmanager
+async def lifespan(_app):
+    try:
+        yield
+    finally:
+        if vector_lookup is not None:
+            await run_in_threadpool(vector_lookup.close)
+
+
+app = FastAPI(title="Property Research Assistant", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -71,7 +92,9 @@ async def chat(
     response: Response,
 ):
     response.headers["Cache-Control"] = "no-store"
-    result = search(request.message, live_data=DATA_MODE == "live")
+    result = await run_in_threadpool(
+        search, request.message, live_data=DATA_MODE == "live", vector_lookup=vector_lookup
+    )
     inference_model = None
     order = list(range(len(result.facts)))
     message = result.message

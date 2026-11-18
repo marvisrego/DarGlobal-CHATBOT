@@ -6,10 +6,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CHAT_MODE=live
 
 WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+ARG PROPERTY_RETRIEVAL_MODE=jsonl
+ENV HF_HOME=/opt/huggingface
+COPY requirements.txt requirements-qdrant.txt property_vectors.py ./
+RUN if [ "$PROPERTY_RETRIEVAL_MODE" = "hybrid" ]; then \
+        pip install --no-cache-dir -r requirements-qdrant.txt && \
+        python -c 'from property_vectors import Embedder; Embedder()' && \
+        chmod -R a+rX "$HF_HOME"; \
+    else \
+        pip install --no-cache-dir -r requirements.txt; \
+    fi
 
-COPY main.py answers.py openrouter_provider.py property_search.py ./
+COPY main.py answers.py openrouter_provider.py property_search.py hybrid_retrieval.py ./
 COPY static/ ./static/
 COPY deploy_data/property_live.jsonl ./snapshots/property_live.jsonl
 
