@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from answers import Source
-from property_search import BUDGET, BEDROOMS, SearchResult, includes, listing_filters, normalized, property_types
+from property_search import BUDGET, BEDROOMS, CURRENCIES, SearchResult, includes, listing_filters, normalized, property_types
 
 
 PUBLISHERS = {"darglobal": "Dar Global PLC", "wasalt": "Wasalt"}
@@ -24,6 +24,21 @@ SEARCH_TERMS = re.compile(r"\b(?:find|show|search|list|available|for sale|for re
 PREFERENCE = re.compile(r"\b(?:near|close to|walking distance|walkable|waterfront|quiet|family friendly|with|prefer)\b")
 BUDGET_ALIAS = re.compile(
     r"\b(?:(?:with(?:in)? (?:a )?)?budget of|at or below|within(?=\s+(?:[A-Z]{3}\s*)?\d))\b", re.I,
+)
+RANGE_AMOUNT = (
+    rf"(?:(?:{CURRENCIES})\s*)?\d+(?:,\d{{3}})*(?:\.\d+)?"
+    rf"(?:\s*(?:million|thousand|m|k)\b)?(?:\s*(?:{CURRENCIES})\b)?"
+)
+PRICE_RANGE = re.compile(
+    rf"\b(?:between|from)\s+({RANGE_AMOUNT})\s*(?:and|to|[-–—])\s*({RANGE_AMOUNT})(?!\d|[.,]\d)", re.I,
+)
+BARE_PRICE_RANGE = re.compile(rf"(?<![\d.,])(\b{RANGE_AMOUNT})\s*(?:\bto\b|[-–—])\s*({RANGE_AMOUNT})(?!\d|[.,]\d)", re.I)
+RANGE_CURRENCY = re.compile(rf"\b(?:{CURRENCIES})\b|(?:{CURRENCIES})(?=\d)", re.I)
+PRICE_RANGE_START = re.compile(rf"\b(?:between|from)\s+(?=(?:{CURRENCIES})\s*\d|\d)", re.I)
+CHEAPEST_FOLLOWUP = re.compile(
+    r"(?:which(?: one)?(?: of (?:these|those|them)(?: (?:listings|units|options|apartments))?)?|what)"
+    r" is (?:the )?(?:cheapest|lowest priced)"
+    r"(?: (?:one|listing|option|unit))?"
 )
 CONTACT = re.compile(r"@|https?://|\b(?:whatsapp|e-?mail|call me|contact agent)\b|(?:\d[ .()+-]*){7,}", re.I)
 SourceKey = Literal["darglobal", "wasalt"]
@@ -103,6 +118,7 @@ class ListingQuery:
     bedrooms: int | None = None
     currency: str | None = None
     budget: Decimal | None = None
+    minimum_price: Decimal | None = None
     strict: bool = False
     source: SourceKey | None = None
     transaction_type: str | None = None
@@ -111,12 +127,19 @@ class ListingQuery:
     preference: str | None = None
 
 
+def budget_range(message):
+    return PRICE_RANGE.search(message) or next(
+        (match for match in BARE_PRICE_RANGE.finditer(message) if RANGE_CURRENCY.search(match[0])), None,
+    )
+
+
 def listing_intent(message):
     query = normalized(message)
     if not LISTING_NOUN.search(query) or includes(query, "guide"):
         return False
     return bool(SEARCH_TERMS.search(query) or BUDGET.search(message) or BUDGET_ALIAS.search(message)
-                or BEDROOMS.search(query) or re.search(r"\blistings?\b", query))
+                or PRICE_RANGE_START.search(message) or budget_range(message) or BEDROOMS.search(query)
+                or re.search(r"\blistings?\b", query))
 
 
 def parse_listing_query(message, cities):
@@ -128,6 +151,19 @@ def parse_listing_query(message, cities):
     terms = set(query.split())
     price_query = BUDGET_ALIAS.sub("up to", message)
     bedrooms, currency, budget, strict = listing_filters(price_query)
+    minimum_price = None
+    price_range = budget_range(price_query)
+    description = price_query
+    if price_range:
+        if not currency or budget is not None:
+            raise ValueError("Use one budget range with a currency, such as between SAR 500,000 and SAR 600,000.")
+        _, _, minimum_price, _ = listing_filters(f"up to {price_range[1]} {currency}")
+        _, _, budget, _ = listing_filters(f"up to {price_range[2]} {currency}")
+        if minimum_price > budget:
+            raise ValueError("The minimum budget must be at or below the maximum.")
+        description = price_query[:price_range.start()] + " " + price_query[price_range.end():]
+    elif PRICE_RANGE_START.search(price_query):
+        raise ValueError("Give both budget limits, such as between SAR 500,000 and SAR 600,000.")
     rent = any(includes(query, phrase) for phrase in ("for rent", "to rent", "rentals", "rental"))
     sale = any(includes(query, phrase) for phrase in ("for sale", "to buy"))
     monthly = bool(terms & {"monthly", "month"})
@@ -140,20 +176,21 @@ def parse_listing_query(message, cities):
     if "darglobal" in terms or includes(query, "dar global"):
         source = None if source else "darglobal"
     # Budget and bedroom phrases can contain "with" without expressing a preference.
-    description = BUDGET.sub(" ", price_query)
+    description = BUDGET.sub(" ", description)
     description = re.sub(r"\bwith\s+(?:\d+|one|two|three|four|five)\s*[- ]?\s*bedrooms?\b", " ", description, flags=re.I)
     description = re.sub(r"\bwith\s+(?:a\s+)?\s*(?=[,.!?]|$|near\b)", " ", description, flags=re.I)
     description = normalized(description)
     preference = PREFERENCE.search(description)
     return ListingQuery(
-        city=matches[0], bedrooms=bedrooms, currency=currency, budget=budget, strict=strict, source=source,
+        city=matches[0], bedrooms=bedrooms, currency=currency, budget=budget, minimum_price=minimum_price,
+        strict=strict, source=source,
         transaction_type="rent" if rent else "sale" if sale else None, types=tuple(sorted(property_types(terms))),
         rent_period=("month" if monthly else "year") if rent and monthly != yearly else None,
         preference=description[preference.start():] if preference else None,
     )
 
 
-def listing_result(rows, retrieval_path):
+def listing_result(rows, retrieval_path, *, has_preference=False):
     if not rows:
         return SearchResult("No verified unit listings in the pilot match those filters.", retrieval_path=retrieval_path)
     facts = []
@@ -183,6 +220,9 @@ def listing_result(rows, retrieval_path):
         facts.append("\n".join(filter(None, fields)))
         sources.append(Source(title=row.title, publisher=PUBLISHERS[row.source], url=row.source_url))
     message = "Unit listings matching your filters. Prices reflect the capture time."
+    if has_preference:
+        message = ("Unit listings matching your location and other filters. Prices reflect the capture time. "
+                   "The requested preference remains unverified. Check the published features below.")
     if retrieval_path == "postgres_after_qdrant_failure":
         message += " Preference ranking was temporarily unavailable."
     return SearchResult(message, facts=facts, sources=sources, passage_ids=[row.listing_id for row in rows],

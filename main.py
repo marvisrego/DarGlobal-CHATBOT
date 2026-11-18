@@ -10,15 +10,15 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 from starlette.concurrency import run_in_threadpool
 
 from answers import ChatReply
 from corpus_snapshot import RELEASES, CorpusUnavailable, live_snapshot
-from listing_pilot import listing_intent
+from listing_pilot import CHEAPEST_FOLLOWUP, listing_intent
 import nvidia_api
 from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
-from property_search import search
+from property_search import normalized, search
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -141,6 +141,9 @@ async def health(response: Response):
 
 class ChatRequest(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    listing_ids: Annotated[list[Annotated[str, StringConstraints(
+        pattern=r"^(?:wasalt|darglobal):[a-z0-9][a-z0-9_.:-]{0,119}$",
+    )]], Field(max_length=5)] | None = None
 
 
 @app.get("/", include_in_schema=False)
@@ -153,6 +156,17 @@ async def home():
     html = html.replace("Preview: Real corpus", f"{badge}: {data_label}")
     if DATA_MODE == "live":
         html = html.replace('data-data-mode="fixture"', 'data-data-mode="live"')
+        if listing_search is not None:
+            html = html.replace("Explore projects and buyer guidance", "Explore projects and listings")
+            html = html.replace(
+                "Research DarGlobal projects and Wasalt buyer guides. Project status is dated to the source.",
+                "Research DarGlobal projects, Wasalt buyer guides, and verified unit listings.",
+            )
+            html = html.replace("Ask about a project or buyer guide", "Ask about a listing, project, or buyer guide")
+            html = html.replace("Across sources", "Listing search").replace(
+                "Summarize AIDA and add Wasalt's guidance on off-plan risk.",
+                "Find 3-bedroom apartments for sale in Riyadh between SAR 500,000 and SAR 600,000.",
+            )
     else:
         html = html.replace("Research DarGlobal projects and Wasalt buyer guides. Project status is dated to the source.",
                             "Try the assistant with fictional records.")
@@ -175,10 +189,15 @@ async def chat(
     request_id = uuid4().hex
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
+    followup = bool(request.listing_ids and CHEAPEST_FOLLOWUP.fullmatch(normalized(request.message)))
+    is_listing = listing_search is not None and (followup or listing_intent(request.message))
     try:
-        if listing_search is not None and listing_intent(request.message):
+        if is_listing:
             response.headers["X-Listing-Release"] = LISTING_RELEASE
-            result = await run_in_threadpool(listing_search, request.message)
+            if followup:
+                result = await run_in_threadpool(listing_search, request.message, previous_ids=request.listing_ids)
+            else:
+                result = await run_in_threadpool(listing_search, request.message)
         else:
             result = await run_in_threadpool(
                 search, request.message, snapshot=corpus_file, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
@@ -228,4 +247,5 @@ async def chat(
         retrieval_path=retrieval_path,
         inference_model=inference_model,
         inference_provider=inference_provider,
+        listing_ids=result.passage_ids if is_listing else None,
     )

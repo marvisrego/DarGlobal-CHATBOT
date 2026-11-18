@@ -42,3 +42,4 @@ class ChatReply(BaseModel):
     retrieval_path: Literal["jsonl", "postgres", "qdrant", "jsonl_after_qdrant_failure", "postgres_after_qdrant_failure"]
     inference_model: str | None = None
     inference_provider: Literal["openrouter", "nvidia"] | None = None
+    listing_ids: list[str] | None = None
