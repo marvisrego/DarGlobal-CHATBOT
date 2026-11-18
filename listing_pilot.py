@@ -232,21 +232,20 @@ def listing_result(rows, retrieval_path, *, has_preference=False):
             if row.transaction_type == "rent" and not row.rent_period:
                 unknowns.append("rent period unpublished")
             context = f" ({', '.join(unknowns)})" if unknowns else ""
-            fields.append(f"Asking price observed at capture: {currency}{amount}{period}{context}")
+            fields.append(f"Asking price reported by the source: {currency}{amount}{period}{context}")
         else:
-            fields.append("The captured listing gives no asking price.")
+            fields.append("The listing source gives no asking price.")
         if row.bedrooms is not None:
             fields.append(f"{row.bedrooms} bedrooms")
         if row.area_sqm is not None:
             fields.append(f"{row.area_sqm.normalize():f} m²")
         if row.features:
             fields.append(f"Published features: {', '.join(row.features)}")
-        fields.append(f"Captured {row.captured_at.isoformat(timespec='seconds')}")
         facts.append("\n".join(filter(None, fields)))
         sources.append(Source(title=row.title, publisher=PUBLISHERS[row.source], url=row.source_url))
-    message = "Unit listings matching your filters. Prices reflect the capture time."
+    message = "Unit listings matching your filters."
     if has_preference:
-        message = ("Unit listings matching your location and other filters. Prices reflect the capture time. "
+        message = ("Unit listings matching your location and other filters. "
                    "The requested preference remains unverified. Check the published features below.")
     if retrieval_path == "postgres_after_qdrant_failure":
         message += " Preference ranking was temporarily unavailable."

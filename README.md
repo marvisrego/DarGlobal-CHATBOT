@@ -1,164 +1,37 @@
-# DarGlobal-CHATBOT
+# DarGlobal Property Research Assistant
 
-The reviewer demo covers **DarGlobal project information and Wasalt buyer guidance**.
-The validated dataset contains 11 distinct projects and 14 sections from
-seven guides. It contains no real apartment listings, current asking prices,
-or verified unit availability. Project status is dated to the source.
-The [15-question evaluation](evaluation/README.md) is a curated regression set
-with separate retrieval, answer and citation checks.
+**[Open the live demo on Render](https://darglobal-chatbot-4x3v.onrender.com/)**
 
-## Property ingestion pilot
+Type a question and press **Enter**, or choose an example on the welcome screen. Keep a listing search and its refinements in the same conversation so the assistant can carry the filters forward. Use **New chat** to start an independent test. Listing cards and research answers include links to the original sources.
 
-From the project root, install the Python requirements and run:
+## Prompts to try
 
-```powershell
-python -m pip install -r requirements.txt
-python -m ingest --limit-per-source 1 --output snapshots/property_pilot.jsonl
-```
-
-The command reads one synthetic discovery page per source and follows up to
-one detail link per source by default (maximum five). Each run replaces the
-local snapshot with UTF-8 JSONL. Records have a UTC collection timestamp and
-`mode: synthetic_fixture`. The reserved `.invalid` URLs identify fictional
-details. Missing fields are null and contact details are excluded.
-
-| Source discovery page | Access review | Pilot mode |
+| What to test | Prompt | What to look for |
 | --- | --- | --- |
-| [DarGlobal projects](https://darglobal.co.uk/projects) | [Robots.txt](https://darglobal.co.uk/robots.txt) permits the projects area. The [published terms](https://darglobal.co.uk/terms-conditions) restrict reuse. HTTPX received an Incapsula challenge instead of the project index. | Synthetic fixture |
-| [Wasalt Riyadh apartments](https://wasalt.sa/en/apartments-for-sale-in-riyadh) | [Robots.txt](https://wasalt.sa/robots.txt) does not block the discovery path, but the [terms of use](https://wasalt.sa/en/s/terms-of-use) restrict copying and extraction. | Synthetic fixture |
+| Greeting | Hi | A short welcome and an invitation to ask about properties. |
+| Broad sale search | What properties can I buy? | A few real listings from the covered cities and an invitation to narrow the search. |
+| Follow-up filters | After the broad search, ask "Only two bedrooms under SAR 900,000." | The assistant keeps the sale filter and finds a two-bedroom Al Marjan apartment in Riyadh with a published asking price of SAR 600,000. |
+| Budget range | Find 3-bedroom apartments for sale in Riyadh between SAR 500,000 and SAR 600,000. | Results respect both ends of the range. |
+| Project comparison | Compare Tierra Viva and Les Vagues across location and property type. | A cited comparison of the two DarGlobal developments. |
+| Buyer guidance | What documents does Wasalt recommend checking before buying a home? | Wasalt guidance on the title deed, building permit, and completion certificate. |
+| Missing price | What is the current asking price of AIDA? | The assistant explains that the available sources give no verified asking price and cites the project information. |
+| Zero matches | Find 3-bedroom apartments for sale in Riyadh under SAR 10,000. | The assistant explains that the pilot has no match and offers to loosen the filters. |
 
-The pilot runs offline. The adapters demonstrate parsing against the included
-HTML and are unverified against publisher detail pages.
+## Data collected
 
-The direct [DarGlobal AIDA page](https://darglobal.co.uk/landing-page/aida)
-opened in Chrome. DarGlobal's terms require written consent for copying or
-reproducing site content, so the direct route produced no records. A
-request with `python -m ingest --live --output snapshots/property_live.jsonl`
-reports zero real records and exits without writing a snapshot.
+| Data | Coverage in the demo | Where it came from |
+| --- | --- | --- |
+| DarGlobal projects | 14 project records with published locations, property types, dated statuses, and selected amenities or development values | The DarGlobal results presentation, public project and announcement pages, and the supporting AIDA announcement from OMRAN |
+| Wasalt buyer guidance | 23 sections summarized from nine guides that cover buying checks, Ejar, off-plan risks, and neighborhoods in Riyadh, Jeddah, and Dammam | Visible text from public Wasalt guide pages |
+| Wasalt sale listings | 14 Riyadh apartments with published asking prices, bedroom counts, and areas where available | Public individual listing pages reviewed using same-day indexed copies after direct access returned HTTP 403 |
+| DarGlobal sale listings | Two units, one at Trump Tower Jeddah and one at AIDA in Muscat. Both have unpublished asking prices. | Public DarGlobal unit booking pages |
 
-## Chat with the snapshot
+The collection process extracted selected public property facts and source links from publisher pages and PDFs. It left unpublished fields blank and excluded broker contact details. Imports used stable record IDs and verified stored rows by reading them back. [Data collection log](docs/data-collection-log.md), [Corpus v2](evaluation/corpus-v2.md), [Listing pilot](docs/listing-pilot.md)
 
-Generate the fixture snapshot with `python -m ingest` before launching the app:
+**The inventory is a small snapshot of 16 sale listings.** Start with Riyadh for price and bedroom filters, or browse across the covered cities. Rental questions can use the Wasalt guides. The unit inventory covers sales only. Treat asking prices and project statuses as published observations, and check the source for current price or availability. Project development values apply to the development as a whole.
 
-```powershell
-python -m uvicorn main:app --host 127.0.0.1 --port 8000
-```
+## How Docker and Render are used
 
-The default preview marks fixture sources as samples. For the reviewer demo,
-set `PROPERTY_DATA_MODE=live` and `CHAT_MODE=live` in the launch environment.
-OpenRouter ranks evidence with free Nemotron or Cohere models. The server
-renders facts, source dates, missing-data messages and citations from the
-snapshot. A fresh checkout can read the packaged snapshot directly.
+Render builds the [Dockerfile](Dockerfile) from `main` using a Python 3.13 slim base image. The image packages the FastAPI app, browser interface, and validated project and guide snapshots. Build settings select the PostgreSQL and NVIDIA vector dependencies. Uvicorn serves the app on the assigned port, and Render uses `/health` for its health check. Credentials are supplied through the service environment.
 
-## Import browser-saved pages
-
-Use detail pages you have permission to reuse. Save each rendered page as
-HTML under `local_html/` or outside the repository. Keep the original HTTPS
-URL and the time you saved it, including the UTC offset. For Wasalt, save
-each apartment detail page individually.
-
-```powershell
-python -m ingest --html local_html/aida.html "https://darglobal.co.uk/landing-page/aida" "<capture-time-with-offset>"
-```
-
-Repeat `--html FILE URL CAPTURED_AT` on the same command to import more pages.
-The command reads files offline, rejects challenges and mismatched canonical
-URLs, and reports counts by source. Valid records replace
-`snapshots/property_live.jsonl` without changing the fixture snapshot. If
-some inputs are rejected, the command writes the valid records and exits with
-status 1. If all are rejected, it leaves any existing snapshot intact.
-
-To query the imported snapshot with the existing UI:
-
-```powershell
-$env:PROPERTY_DATA_MODE = "live"
-$env:CHAT_MODE = "mock"
-python -m uvicorn main:app --host 127.0.0.1 --port 8004
-```
-
-This mode returns source links from imported records. It uses local lookup,
-which can be verified independently of OpenRouter. Cross-check extracted
-fields against each saved page before relying on the snapshot.
-
-The [data collection log](docs/data-collection-log.md) documents the
-alternatives checked and how to reproduce the OMRAN AIDA record.
-See the [expanded corpus evaluation](evaluation/README.md) for the
-current live snapshot, retrieval trace, and reproduction commands.
-
-## Docker and Render
-
-The image copies the validated real dataset from
-`deploy_data/property_live.jsonl`. Refresh this file from a verified local
-snapshot before rebuilding. A read-only JSONL snapshot serves the current
-corpus and filters without a database or vector store.
-The Docker command listens on `0.0.0.0` and uses `PORT`, defaulting to
-`10000`. The health endpoint returns HTTP 200 with `{"status":"ok"}`
-without calling OpenRouter or any other service.
-
-Build and run the Docker demo from PowerShell. The key is read into the
-current process environment and passed only at container runtime.
-
-```powershell
-docker build -t darglobal-chatbot .
-$env:OPENROUTER_API_KEY = python -c "from dotenv import dotenv_values; print(dotenv_values('.env', interpolate=False)['OPENROUTER_API_KEY'])"
-docker run --rm --name darglobal-chatbot -e OPENROUTER_API_KEY -e PORT=10000 -p 127.0.0.1:8004:10000 darglobal-chatbot
-```
-
-In another terminal, run the health and fresh Chrome smoke checks. Install
-the optional browser dependency with `python -m pip install playwright==1.65.2`
-if needed. Use the assigned Render HTTPS base URL to repeat these checks
-after deployment.
-
-```powershell
-python -m smoke_demo http://127.0.0.1:8004
-python -m smoke_demo https://your-service.onrender.com
-```
-
-The script verifies a project comparison and dated statuses, a Wasalt guide
-answer, working publisher citations, and an explicit missing price response.
-
-To deploy, push the assignment commit to `origin/dev` and sign in to Render.
-Connect this GitHub repository and deploy a **Free Docker Web Service** from
-the `dev` branch using the root `Dockerfile`. The included `render.yaml`
-also defines these settings for a Render Blueprint. Set the health check
-path to `/health`. In the Render service's **Environment** settings, add
-`OPENROUTER_API_KEY` using the real key, set `CHAT_MODE=live`, and set
-`PROPERTY_DATA_MODE=live`. Keep the key out of the build and repository.
-Once Render assigns an HTTPS URL, run the browser smoke command against it.
-
-## Excel export and future storage
-
-From the project root, run `node export_corpus.mjs`. This uses the bundled
-spreadsheet runtime in the Codex cache. If it is installed elsewhere, set
-`CORPUS_ARTIFACT_NODE_MODULES` to its `node_modules` directory. The exporter
-uses the local validated snapshot when present and the packaged copy in a
-fresh checkout. It writes `exports/property_corpus.xlsx` and reopens it to
-verify the data in all three sheets. Stable record and source IDs join the
-project and guide rows to the Sources sheet, including the OMRAN supporting
-source for AIDA. Export dependencies stay outside the runtime image.
-
-`DATABASE_URL` is reserved for a future Supabase Postgres connection.
-`QDRANT_URL`, `QDRANT_API_KEY`, and `QDRANT_COLLECTION` are reserved for
-future vector search. All four settings can be empty for the current app.
-Postgres migration, Qdrant provisioning and embeddings are deferred. Keep
-future credentials in local or runtime settings.
-
-## Keep-alive for the assignment review
-
-In GitHub, open **Settings > Secrets and variables > Actions > New repository
-secret**. Name it `RENDER_SERVICE_URL` and set its value to the Render base
-HTTPS URL, for example `https://your-service.onrender.com`, without
-`/health`.
-
-Once the workflow is present on the default branch, go to **Actions >
-Keep Render service alive > Run workflow**, select the branch, and click
-**Run workflow**. Open the run and check that **Check Render health** passed.
-GitHub requires the workflow on the default branch both for cron and to
-enable manual dispatch. The copy on `dev` alone does not activate either.
-After the review, open the same workflow under **Actions**, use its menu,
-and select **Disable workflow**.
-
-Render provides 750 free instance hours per calendar month, shared across
-each workspace. Keeping one service running consumes those hours while it
-is awake. The workflow is scheduled every 10 minutes. Delayed GitHub runs
-can leave the Free service idle long enough for a cold start.
+The hosted app reads project, guide, and listing facts from Supabase Postgres. NVIDIA Nemotron Ultra chooses a read-only search tool when a question needs property data. Qdrant supplies semantic candidates from one shared collection with **53 vectors**. Postgres enforces the listing filters and supplies the canonical facts and links used for the answer. [Live health check](https://darglobal-chatbot-4x3v.onrender.com/health)

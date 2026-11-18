@@ -198,7 +198,7 @@ class PropertyAssistant:
                             count = len(result.listing_cards)
                             noun = "one listing" if count == 1 else f"{count} listings"
                             scope = "for those filters" if arguments.refine_previous else "in the inventory I can see"
-                            result.message = f"I found {noun} {scope}. Each asking price reflects the date it was recorded."
+                            result.message = f"I found {noun} {scope}."
                     LOGGER.info("chat request_id=%s tool=search_listings backend=postgres status=ok rows=%s",
                                 request_id, len(result.listing_cards))
                 else:
