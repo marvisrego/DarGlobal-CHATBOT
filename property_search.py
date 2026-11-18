@@ -37,6 +37,9 @@ GUIDE_TOPICS = re.compile(
     r"apartments?|condo\w*|build\w*|mainten\w*|repairs?|neighbou?r\w*|districts?|ejar|park|"
     r"commut\w*|off plan|developer\w*)\b"
 )
+TRANSIT_WORDING = re.compile(
+    r"\b(?:trains?|metro|subway|public (?:transit|transport(?:ation)?)|don t drive|do not drive|without a car|no car)\b"
+)
 NO_MATCH = "No sample records match that request."
 HELP = (
     "Ask about a project by name, such as Sample Harbour Residences, or search Wasalt "
@@ -63,6 +66,21 @@ def normalized(text):
 
 def includes(text, phrase):
     return f" {phrase} " in f" {text} "
+
+
+def guide_alias_query(query, terms):
+    if "riyadh" not in terms or not terms & {"commute", "commuting", "job", "office", "work"}:
+        return query
+    if not TRANSIT_WORDING.search(query) or terms & {"rent", "renting", "lease", "leasing"}:
+        return query
+    buying = terms & {"buy", "buying", "purchase", "purchasing"} or includes(query, "house hunting")
+    choosing_home = terms & {"home", "house", "property", "neighborhood", "neighbourhood"} and terms & {
+        "check", "choose", "consider", "look", "looking",
+    }
+    if buying or choosing_home:
+        # Match the existing transit alias without changing project or listing filters.
+        return f"{query} metro access"
+    return query
 
 
 def listing_filters(message):
@@ -226,11 +244,12 @@ def corpus_search(message, records, *, vector_lookup=None):
         matched_projects = [row for row in projects if matches_project_filters(row, locations, types, complete, constructing)]
     guide_candidates = []
     if not listing_intent:
+        alias_query = query if BUDGET.search(message) else guide_alias_query(query, terms)
         for row in records:
             if row["record_type"] != "buyer_guide" or not row.get("record_id"):
                 continue
             aliases = [normalized(alias) for alias in row.get("aliases", [])]
-            hits = [alias for alias in aliases if includes(query, alias)]
+            hits = [alias for alias in aliases if includes(alias_query, alias)]
             if hits and (wants_wasalt or not project_intent):
                 score = sum(1 if alias == "off plan" else 1 + len(alias.split()) ** 2 for alias in hits)
                 guide_candidates.append((score, row["record_id"], row))
