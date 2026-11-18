@@ -41,7 +41,25 @@ python -m publish_listings --input snapshots/approved-listings-v1.json --release
 python -m publish_listings --input snapshots/approved-listings-v1.json --release v1
 ```
 
-The importer verifies the vector index before opening the Postgres publication transaction, so a slow embedding request leaves queries for an existing release available. A retry of identical data is safe. Each release has a separate collection, such as `darglobal-wasalt-listings-nvidia-embed-1b-v3`. The v1 pilot accepts up to 10 units. Keep the existing project and guide corpus settings and opt into the current listing release with `PROPERTY_LISTING_RELEASE=v3`. The runtime Postgres connection needs read access to both listing tables, including an RLS policy if it uses a dedicated non-owner role.
+The importer verifies the vector index before opening the Postgres publication transaction, so a slow embedding request leaves queries for an existing release available. A retry of identical data is safe. The v1 pilot accepts up to 10 units. The runtime Postgres connection needs read access to both listing tables, including an RLS policy if it uses a dedicated non-owner role.
+
+## Shared Qdrant collection for Render
+
+The shared collection serves project, guide, and listing retrieval. Keep the existing live v2 corpus, Postgres, and NVIDIA settings. Set the following variable in Render.
+
+```dotenv
+QDRANT_COLLECTION=darglobal-wasalt-nvidia-corpus-v2-listings-v3
+```
+
+The collection name selects listing release `v3` automatically. It takes precedence over the older `PROPERTY_LISTING_RELEASE` setting. Project and guide candidate IDs still come from the configured corpus. Listing candidate IDs still come from the filtered Postgres query.
+
+The following command copies the existing NVIDIA vectors into a shared collection for a published pair.
+
+```powershell
+python -m combine_qdrant --corpus-version v2 --listing-release v3
+```
+
+The command checks both source releases, then verifies the shared collection's IDs, payloads, and vectors by read-back. The already published source collections support rollback and rebuilding.
 
 ## Acceptance before expansion
 

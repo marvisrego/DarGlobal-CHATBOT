@@ -2,6 +2,7 @@
 
 import logging
 import math
+import re
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from time import sleep
@@ -17,6 +18,7 @@ RERANK_MODEL = "nvidia/nemotron-3.5-rerank-8b"
 RERANK_ENDPOINT = f"https://ai.api.nvidia.com/v1/retrieval/{RERANK_MODEL}/reranking"
 DIMENSION = 2048
 COLLECTION = "darglobal-wasalt-nvidia-embed-1b-v1"
+SHARED_PREFIX = "darglobal-wasalt-nvidia-corpus-"
 EMBEDDING = {
     "model": EMBED_MODEL,
     "dimension": DIMENSION,
@@ -30,6 +32,19 @@ LOGGER = logging.getLogger("uvicorn.error.darglobal")
 
 def collection_for_release(version):
     return f"{COLLECTION.rsplit('-', 1)[0]}-{version}"
+
+
+def shared_collection_name(corpus_version, listing_version):
+    return f"{SHARED_PREFIX}{corpus_version}-listings-{listing_version}"
+
+
+def shared_collection_releases(name):
+    if not name.startswith(SHARED_PREFIX):
+        return None
+    match = re.fullmatch(r"(v[1-9]\d*)-listings-(v[1-9][0-9]{0,5})", name.removeprefix(SHARED_PREFIX))
+    if match is None:
+        raise ValueError("Invalid shared Qdrant collection name.")
+    return match.groups()
 
 
 def vector_config_for_release(version, snapshot):

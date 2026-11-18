@@ -48,7 +48,14 @@ CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "openrouter").strip().lower()
 if CHAT_PROVIDER not in {"openrouter", "nvidia"}:
     raise RuntimeError("CHAT_PROVIDER must be openrouter or nvidia.")
 DEPLOY_COMMIT = os.getenv("RENDER_GIT_COMMIT", "")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "").strip()
+SHARED_RELEASES = nvidia_api.shared_collection_releases(QDRANT_COLLECTION)
 LISTING_RELEASE = os.getenv("PROPERTY_LISTING_RELEASE", "").strip()
+if SHARED_RELEASES:
+    shared_corpus, LISTING_RELEASE = SHARED_RELEASES
+    if (shared_corpus != CORPUS_VERSION or DATA_MODE != "live"
+            or RETRIEVAL_MODE != "nvidia" or CORPUS_BACKEND != "postgres"):
+        raise RuntimeError("The shared Qdrant collection requires its named live corpus, Postgres and NVIDIA retrieval.")
 
 
 def required_setting(name):
@@ -75,7 +82,7 @@ if RETRIEVAL_MODE in {"hybrid", "nvidia"} and DATA_MODE == "live":
             required_setting("Nvidia_Embed"), required_setting("Nvidia_rerank")
         )
         vector_lookup = HybridLookup(
-            collection=nvidia_api.collection_for_release(CORPUS_VERSION),
+            collection=QDRANT_COLLECTION if SHARED_RELEASES else nvidia_api.collection_for_release(CORPUS_VERSION),
             limit=nvidia_api.RERANK_LIMIT, embedder=nvidia_retrieval,
             vector_config=nvidia_api.vector_config_for_release(CORPUS_VERSION, corpus_file),
             cooldown=0,
@@ -97,7 +104,10 @@ if LISTING_RELEASE:
         raise RuntimeError("PROPERTY_LISTING_RELEASE requires live data, Postgres and NVIDIA retrieval.")
     from listing_store import PostgresListings
 
-    listing_search = PostgresListings(required_setting("DATABASE_URL"), LISTING_RELEASE, nvidia_retrieval)
+    listing_search = PostgresListings(
+        required_setting("DATABASE_URL"), LISTING_RELEASE, nvidia_retrieval,
+        shared_collection=QDRANT_COLLECTION if SHARED_RELEASES else None,
+    )
 
 
 @asynccontextmanager
@@ -124,6 +134,8 @@ async def health(response: Response):
     response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
     if listing_search is not None:
         response.headers["X-Listing-Release"] = LISTING_RELEASE
+    if SHARED_RELEASES:
+        response.headers["X-Qdrant-Collection"] = QDRANT_COLLECTION
     return {"status": "ok"}
 
 
