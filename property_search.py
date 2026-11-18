@@ -130,8 +130,8 @@ def corpus_search(message, records):
     )
     listing_intent = wants_wasalt and (
         BUDGET.search(message) or BEDROOMS.search(message.casefold())
-        or bool(terms & {"listings", "listing", "available", "availability"})
-        or (bool(terms & {"apartment", "apartments"}) and
+        or bool(terms & {"listings", "listing"})
+        or (bool(terms & {"available", "availability", "apartment", "apartments"}) and
             not bool(terms & {"guide", "compare", "compound", "compounds"}))
     )
     locale = {
