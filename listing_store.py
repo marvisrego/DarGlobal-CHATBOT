@@ -42,6 +42,9 @@ def select_listings(connection, release, query):
     if query.budget is not None:
         conditions.append("asking_price < %s" if query.strict else "asking_price <= %s")
         params.append(query.budget)
+    if query.minimum_price is not None:
+        conditions.append("asking_price >= %s")
+        params.append(query.minimum_price)
     return connection.execute(
         f"SELECT {', '.join(LISTING_FIELDS)} FROM {TABLE} WHERE {' AND '.join(conditions)} "
         "ORDER BY asking_price NULLS LAST, listing_id",
@@ -56,10 +59,26 @@ def vector_config(digest):
     }
 
 
-def search_listings(connection, release, message, lookup_for_release):
+def search_listings(connection, release, message, lookup_for_release, *, previous_ids=()):
     registered = connection.execute(f"SELECT digest FROM {RELEASES} WHERE version = %s", (release,)).fetchone()
     if registered is None:
         raise CorpusUnavailable("missing_listing_release")
+    if previous_ids:
+        priced = [Listing.model_validate(row) for row in connection.execute(
+            f"SELECT {', '.join(LISTING_FIELDS)} FROM {TABLE} "
+            "WHERE release = %s AND listing_id = ANY(%s) AND asking_price IS NOT NULL AND currency IS NOT NULL "
+            "ORDER BY asking_price, listing_id",
+            (release, list(previous_ids)),
+        )]
+        if not priced:
+            return SearchResult("The previous listings have no verified comparable asking prices.", retrieval_path="postgres")
+        if (len({(row.currency, row.transaction_type, row.rent_period) for row in priced}) > 1
+                or any(row.transaction_type == "rent" and not row.rent_period for row in priced)):
+            return SearchResult("Choose one currency and a sale or rental price period to compare.", retrieval_path="postgres")
+        cheapest = [row for row in priced if row.asking_price == priced[0].asking_price]
+        result = listing_result(cheapest, "postgres")
+        result.message = "Lowest published asking price among the previous results."
+        return result
     cities = [row["city_key"] for row in connection.execute(
         f"SELECT DISTINCT city_key FROM {TABLE} WHERE release = %s AND city_key IS NOT NULL", (release,)
     )]
@@ -81,7 +100,7 @@ def search_listings(connection, release, message, lookup_for_release):
             retrieval_path = "qdrant"
         else:
             retrieval_path = "postgres_after_qdrant_failure"
-    return listing_result(rows[:RESULT_LIMIT], retrieval_path)
+    return listing_result(rows[:RESULT_LIMIT], retrieval_path, has_preference=bool(query.preference))
 
 
 class PostgresListings:
@@ -100,12 +119,12 @@ class PostgresListings:
                             vector_config={**vector_config(digest), "metadata_key": self._metadata_key},
                             cooldown=0, structured_backend="Postgres")
 
-    def __call__(self, message):
+    def __call__(self, message, *, previous_ids=()):
         try:
             with connect(**self._settings, row_factory=dict_row) as connection:
                 connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
                 connection.execute("SET LOCAL statement_timeout = '4s'")
-                return search_listings(connection, self._release, message, self._lookup)
+                return search_listings(connection, self._release, message, self._lookup, previous_ids=previous_ids)
         except Error:
             raise CorpusUnavailable("listing_database_read_failed") from None
         except ValueError:

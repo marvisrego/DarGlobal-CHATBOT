@@ -42,6 +42,52 @@ class ListingPilotTests(unittest.TestCase):
         query = parse_listing_query("Show apartments for rent in Riyadh under SAR 5,000 per month.", ["riyadh"])
         self.assertEqual((query.transaction_type, query.rent_period), ("rent", "month"))
 
+    def test_price_range_uses_both_inclusive_bounds(self):
+        from listing_store import select_listings
+
+        query = parse_listing_query(
+            "Find 3-bedroom apartments in Riyadh between SAR 500,000 and SAR 600,000.", ["riyadh"],
+        )
+        self.assertEqual((query.minimum_price, query.budget, query.strict),
+                         (Decimal("500000"), Decimal("600000"), False))
+        bare = parse_listing_query("3-bedroom apartments in Riyadh SAR 500k–600k.", ["riyadh"])
+        self.assertEqual((bare.minimum_price, bare.budget), (query.minimum_price, query.budget))
+        connection = Mock()
+        select_listings(connection, "v3", query)
+        sql, params = connection.execute.call_args.args
+        self.assertIn("asking_price <= %s", sql)
+        self.assertIn("asking_price >= %s", sql)
+        self.assertEqual(params[-2:], [Decimal("600000"), Decimal("500000")])
+        with self.assertRaisesRegex(ValueError, "minimum budget"):
+            parse_listing_query("Show apartments in Riyadh between SAR 600,000 and SAR 500,000.", ["riyadh"])
+        with self.assertRaisesRegex(ValueError, "both budget limits"):
+            parse_listing_query("Show apartments in Riyadh between SAR 600,000.", ["riyadh"])
+
+    def test_descriptive_result_marks_preference_unverified(self):
+        row = Listing.model_validate(wasalt_fixture())
+        result = listing_result([row], "qdrant", has_preference=True)
+        self.assertIn("requested preference remains unverified", result.message)
+
+    def test_followup_is_scoped_to_previous_listing_ids(self):
+        import main
+        from listing_store import search_listings
+
+        expensive = Listing.model_validate(wasalt_fixture("9999992", asking_price="600000"))
+        cheap = Listing.model_validate(wasalt_fixture())
+        connection = Mock()
+        connection.execute.side_effect = [Mock(fetchone=Mock(return_value={"digest": "example"})),
+                                          [cheap.model_dump(), expensive.model_dump()]]
+        ids = [expensive.listing_id, cheap.listing_id]
+        provider = Mock(side_effect=lambda message, **kwargs:
+                        search_listings(connection, "v3", message, None, **kwargs))
+        with TestClient(main.app) as client, patch.object(main, "listing_search", provider):
+            reply = client.post("/api/chat", json={"message": "Which of these is the cheapest?", "listing_ids": ids})
+        self.assertEqual(reply.status_code, 200)
+        body = reply.json()
+        self.assertEqual(body["listing_ids"], [cheap.listing_id])
+        self.assertEqual([source["url"] for source in body["sources"]], [cheap.source_url])
+        self.assertEqual(connection.execute.call_args.args[1], ("v3", ids))
+
     def test_validates_unit_citation_and_rejects_contact_data(self):
         for overrides in (
             {"source_url": "https://wasalt.sa/en/apartments-for-sale-in-riyadh"},

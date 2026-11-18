@@ -118,18 +118,20 @@ function renderSources(data) {
   return list;
 }
 
-function renderConversation({ scroll = false } = {}) {
+function renderConversation({ scroll = false, reveal = null } = {}) {
   const chat = activeChat();
   byId("welcome").hidden = Boolean(chat);
   thread.hidden = !chat;
   placeComposer();
   thread.replaceChildren();
+  let revealedReply;
   for (const turn of chat?.turns || []) {
     const article = element("article", "turn");
     article.setAttribute("aria-label", "Question and answer");
     const question = element("p", "question", turn.message);
     question.prepend(element("span", "sr-only", "You: "));
     const reply = element("div", "reply");
+    if (turn === reveal) revealedReply = reply;
     reply.append(element("h2", "", "Research assistant"));
     if (turn.response) {
       for (const paragraph of turn.response.answer.split(/\n\s*\n/)) {
@@ -164,7 +166,14 @@ function renderConversation({ scroll = false } = {}) {
     thread.append(article);
   }
   updateComposer();
-  if (scroll) viewport.scrollTop = viewport.scrollHeight;
+  if (scroll) {
+    if (revealedReply && revealedReply.offsetHeight > viewport.clientHeight) {
+      const offset = revealedReply.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+      viewport.scrollTop += offset - 12;
+    } else {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+  }
 }
 
 function selectChat(id) {
@@ -186,7 +195,7 @@ async function requestAnswer(chat, turn) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: turn.message }),
+      body: JSON.stringify({ message: turn.message, listing_ids: turn.listingIds || undefined }),
       signal: AbortSignal.timeout(live ? 45000 : 15000),
     });
     if (!response.ok) throw new Error("Chat request failed");
@@ -199,7 +208,7 @@ async function requestAnswer(chat, turn) {
     if (state.activeId === chat.id) {
       announcement.textContent = status;
       const nearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
-      renderConversation({ scroll: nearBottom });
+      renderConversation({ scroll: nearBottom, reveal: turn.response ? turn : null });
     }
   }
 }
@@ -215,7 +224,7 @@ form.addEventListener("submit", (event) => {
     state.activeId = chat.id;
   }
   state.chats = [chat, ...state.chats.filter((item) => item !== chat)];
-  const turn = { message, response: null };
+  const turn = { message, response: null, listingIds: chat.turns.at(-1)?.response?.listing_ids };
   chat.turns.push(turn);
   input.value = "";
   input.focus();
