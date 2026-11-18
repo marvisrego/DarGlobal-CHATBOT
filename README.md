@@ -19,6 +19,8 @@ Type a question and press **Enter**, or choose an example on the welcome screen.
 
 ## Data collected
 
+The assignment named DarGlobal and Wasalt and left the choice of data types open. I chose data that would let the chatbot help a prospective buyer compare developments, find individual homes within a budget, and understand what to check before buying. DarGlobal's project material describes developments, Wasalt's buyer guides cover the purchase process, and public unit listings from both publishers support searches by location, price, and bedroom count where those details are published.
+
 | Data | Coverage in the demo | Where it came from |
 | --- | --- | --- |
 | DarGlobal projects | 14 project records with published locations, property types, dated statuses, and selected amenities or development values | The DarGlobal results presentation, public project and announcement pages, and the supporting AIDA announcement from OMRAN |
@@ -30,11 +32,27 @@ The collection process extracted selected public property facts and source links
 
 **The inventory is a small snapshot of 16 sale listings.** Start with Riyadh for price and bedroom filters, or browse across the covered cities. Rental questions can use the Wasalt guides. The unit inventory covers sales only. Treat asking prices and project statuses as published observations, and check the source for current price or availability. Project development values apply to the development as a whole.
 
-## How Docker and Render are used
+## Architecture
 
-Render builds the [Dockerfile](Dockerfile) from `main` using a Python 3.13 slim base image. The image packages the FastAPI app, browser interface, and validated project and guide snapshots. Build settings select the PostgreSQL and NVIDIA vector dependencies. Uvicorn serves the app on the assigned port, and Render uses `/health` for its health check. Credentials are supplied through the service environment.
+### From question to answer
 
-The hosted app reads project, guide, and listing facts from Supabase Postgres. NVIDIA Nemotron Ultra chooses a read-only search tool when a question needs property data. Qdrant supplies semantic candidates from one shared collection with **53 vectors**. Postgres enforces the listing filters and supplies the canonical facts and links used for the answer. [Live health check](https://darglobal-chatbot-4x3v.onrender.com/health)
+1. The browser sends questions to FastAPI at `POST /api/chat`. It saves chat history locally and sends previous listing filters with follow-up questions, so a request such as “only two bedrooms” can narrow the existing search.
+2. NVIDIA Nemotron Ultra chooses a read-only tool. `search_listings` applies structured filters such as city, transaction type, bedroom count, and price range in Postgres. `search_knowledge` searches project descriptions and buyer guides using structured matches and semantic candidates from Qdrant. Greetings can skip retrieval.
+3. The backend resolves candidates against the stored source records. Nemotron uses the retrieved evidence to compose the reply, and FastAPI builds listing cards and citations from the source records. The app distinguishes an empty search, an unpublished price, and a retrieval failure.
+
+### Databases and models
+
+| Component | Role in the hosted demo |
+| --- | --- |
+| **Supabase Postgres** | Stores project and guide records in `property_corpus` (corpus `v2`), unit records in `property_listing`, and release metadata in `property_listing_release` (active release `v3`). Supplies source URLs and applies exact listing filters. |
+| **Qdrant** | Holds 53 vectors in one collection covering 37 project and guide records and 16 listings. Semantic search returns candidate record IDs for the backend to resolve against Postgres. |
+| **NVIDIA Nemotron Ultra** (`nvidia/nemotron-3-ultra-550b-a55b`) | Routes questions to tools and composes evidence-backed replies. The hosted demo calls NVIDIA's API directly as the inference provider. |
+| **NVIDIA Nemotron Embed** (`nvidia/nemotron-3.5-embed-1b`) | Creates 2,048-dimensional vectors for indexing and embeds search queries at runtime. |
+| **NVIDIA Nemotron Rerank** (`nvidia/nemotron-3.5-rerank-8b`) | Reorders eligible project and guide candidates by relevance. If reranking is unavailable, the search keeps the existing candidate order. |
+
+### Docker and Render
+
+Render builds the [Dockerfile](Dockerfile) from `main` using Python 3.13 slim. The image packages FastAPI, the browser interface, and the validated project and guide snapshots. Build settings include the dependencies for Postgres and NVIDIA retrieval. Uvicorn serves the app on Render's assigned port, and credentials are supplied through the service environment. [Live health check](https://darglobal-chatbot-4x3v.onrender.com/health)
 
 ## Repository layout
 
