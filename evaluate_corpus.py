@@ -33,6 +33,10 @@ def citation_key(source):
     return source["publisher"], source["title"], source["url"]
 
 
+def normalized_fact(text):
+    return " ".join(text.casefold().translate(str.maketrans("‘’‑–", "''--")).split())
+
+
 def benchmark_embeddings():
     from property_vectors import Embedder
 
@@ -113,7 +117,9 @@ def main():
                 response.is_success and all(not source["fixture"] and source["url"] for source in actual_sources)
                 and {citation_key(source) for source in actual_sources} == expected_citations
             )
-            fact_pass = response.is_success and all(fact.casefold() in answer.casefold() for fact in item["facts"])
+            fact_pass = response.is_success and all(
+                normalized_fact(fact) in normalized_fact(answer) for fact in item["facts"]
+            )
             if args.openrouter:
                 fact_pass = fact_pass and bool(payload.get("inference_model"))
             results.append({
