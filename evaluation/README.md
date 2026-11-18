@@ -1,4 +1,6 @@
-# Expanded corpus evaluation
+# Original corpus evaluation
+
+The hosted demo uses the [v2 corpus](corpus-v2.md) and the [listing pilot](../docs/listing-pilot.md).
 
 See the [Qdrant evaluation](qdrant.md) for the vector search comparison on the
 same 15 questions and six additional paraphrases and misspellings.
@@ -52,15 +54,14 @@ deterministic abstention.
 | Check | Result | What passed |
 | --- | --- | --- |
 | Baseline retrieval | 6/15 | All expected passage IDs appeared in the first five, or no passage was returned for a negative case. |
-| Updated retrieval | 15/15 | Same scoring rule. The [results](results.json) show each top-five trace. |
+| Updated retrieval | 15/15 | Same scoring rule, with the top-five trace in the generated report. |
 | Answer facts | 15/15 | The HTTP response contained the expected facts or acknowledged missing evidence. |
 | Answer citations | 15/15 | The HTTP response's publisher, source title and URL matched the expected evidence set. |
 | OpenRouter | 2/2 | DarGlobal Tierra Viva vs. Les Vagues with Nemotron; Wasalt staged payments vs. developer checks with Cohere North Mini Code. Both passed facts and citations. |
 
 For the Wasalt run, OpenRouter received short, attributed paraphrases and the
 request disallowed providers that collect prompt data. Two Gemma routes
-returned HTTP 429 before the compatible Cohere route passed. See
-[live run results](openrouter-results.json).
+returned HTTP 429 before the compatible Cohere route passed.
 
 These are regression checks on a small curated set, with expected sources
 and key facts in [questions.json](questions.json). They do not estimate
@@ -76,10 +77,10 @@ captures remain under ignored `local_html/`.
 ```powershell
 python -m pip install -r requirements.txt
 python -m pip install PyMuPDF==1.27.2.3 playwright==1.65.2
-python -m capture_guides
-python -m ingest --expand-corpus local_html/expanded_guides.json
-python -m evaluate_corpus --output evaluation/results.json
-python -m evaluate_corpus --openrouter --output evaluation/openrouter-results.json
+python -m scripts.capture_guides
+python -m scripts.ingest --expand-corpus local_html/expanded_guides.json
+python -m scripts.evaluate_corpus --output exports/corpus-results.json
+python -m scripts.evaluate_corpus --openrouter --output exports/openrouter-results.json
 ```
 
 If the Chrome captures are already present, skip `capture_guides` to use the

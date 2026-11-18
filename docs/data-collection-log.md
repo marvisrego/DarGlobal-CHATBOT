@@ -61,7 +61,7 @@ Rebuild the OMRAN record separately only if the snapshot does not exist.
 
 ```powershell
 python -m pip install PyMuPDF==1.27.2.3
-if (-not (Test-Path snapshots/property_live.jsonl)) { python -m ingest --omran-aida }
+if (-not (Test-Path snapshots/property_live.jsonl)) { python -m scripts.ingest --omran-aida }
 $cli = (Resolve-Path node_modules/.bin/playwright-cli.cmd).Path
 New-Item -ItemType Directory -Force local_html | Out-Null
 Push-Location local_html
@@ -73,7 +73,7 @@ try {
     & $cli -s=wasalt-guide close
     Pop-Location
 }
-python -m ingest --dar-report --wasalt-guide local_html/guide.yml $captured
+python -m scripts.ingest --dar-report --wasalt-guide local_html/guide.yml $captured
 ```
 
 The last command preserves existing real records, including OMRAN, and

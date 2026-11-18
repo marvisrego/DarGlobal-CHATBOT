@@ -11,7 +11,7 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from corpus_snapshot import RELEASES, ROOT, live_snapshot
-from index_qdrant import load_payloads, read_payloads
+from scripts.index_qdrant import load_payloads, read_payloads
 from listing_pilot import collection_name
 from listing_store import RELEASES as LISTING_RELEASES, TABLE, database_settings, vector_config
 import nvidia_api

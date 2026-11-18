@@ -14,7 +14,7 @@ from psycopg.rows import dict_row
 from qdrant_client import QdrantClient, models
 
 from corpus_snapshot import ROOT
-from index_qdrant import ensure_collection, hosted_passage_vectors, read_payloads, verify
+from scripts.index_qdrant import ensure_collection, hosted_passage_vectors, read_payloads, verify
 from listing_pilot import PUBLISHERS, Listing, collection_name
 from listing_store import RELEASES, ROW_FIELDS, TABLE, database_settings, vector_config
 from nvidia_api import NvidiaRetrievalAPI

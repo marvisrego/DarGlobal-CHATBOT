@@ -6,7 +6,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = dirname(fileURLToPath(import.meta.url));
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const bundled = join(homedir(), ".cache", "codex-runtimes", "codex-primary-runtime",
   "dependencies", "node", "node_modules");
 const modules = resolve(process.env.CORPUS_ARTIFACT_NODE_MODULES || bundled);

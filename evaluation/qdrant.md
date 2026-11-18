@@ -91,7 +91,7 @@ if (-not (Test-Path snapshots/property_live.jsonl)) {
     Copy-Item deploy_data/property_live.jsonl snapshots/property_live.jsonl
 }
 python -m pip install -r requirements-qdrant.txt
-python -m index_qdrant --dry-run
+python -m scripts.index_qdrant --dry-run
 ```
 
 For cloud runs, set `QDRANT_URL` and `QDRANT_API_KEY` in ignored local
@@ -99,10 +99,10 @@ For cloud runs, set `QDRANT_URL` and `QDRANT_API_KEY` in ignored local
 explicit override below for the verified cloud collection.
 
 ```powershell
-python -m index_qdrant --collection darglobal-wasalt-minilm-v1
-python -m index_qdrant --collection darglobal-wasalt-minilm-v1
+python -m scripts.index_qdrant --collection darglobal-wasalt-minilm-v1
+python -m scripts.index_qdrant --collection darglobal-wasalt-minilm-v1
 New-Item -ItemType Directory -Force exports | Out-Null
-python -m index_qdrant --collection darglobal-wasalt-minilm-v1 --evaluate --output exports/qdrant-results.json
+python -m scripts.index_qdrant --collection darglobal-wasalt-minilm-v1 --evaluate --output exports/qdrant-results.json
 ```
 
 The trace includes all five IDs and cosine scores for each Qdrant query,
@@ -111,7 +111,7 @@ available. To run without Qdrant credentials, use the embedded store under
 ignored `exports/qdrant-local`.
 
 ```powershell
-python -m index_qdrant --local
-python -m index_qdrant --local
-python -m index_qdrant --local --evaluate --output exports/qdrant-local-results.json
+python -m scripts.index_qdrant --local
+python -m scripts.index_qdrant --local
+python -m scripts.index_qdrant --local --evaluate --output exports/qdrant-local-results.json
 ```

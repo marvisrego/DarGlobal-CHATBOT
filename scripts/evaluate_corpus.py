@@ -10,10 +10,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from corpus_snapshot import RELEASES, live_snapshot
+from corpus_snapshot import RELEASES, ROOT, live_snapshot
 from property_search import search
 
-ROOT = Path(__file__).resolve().parent
 LIVE_GUIDE_CASE = {
     "id": "offplan",
     "question": "For Wasalt off-plan payments, compare staged payments with the developer track record for off-plan risk.",
@@ -159,6 +158,7 @@ def main():
         print(row["id"], row["status"], ", ".join(row["top_five"]) or "(no passage)",
               row["inference_model"] or row["error"] or "")
     if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return int(not all(row[key] for row in results for key in ("retrieval_pass", "facts_pass", "citations_pass")))
 

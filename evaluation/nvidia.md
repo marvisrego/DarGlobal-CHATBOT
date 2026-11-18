@@ -58,10 +58,10 @@ into `snapshots/` first.
 
 ```powershell
 python -m pip install -r requirements.txt -r requirements-vector-store.txt
-python -m index_qdrant --nvidia
+python -m scripts.index_qdrant --nvidia
 python -m unittest discover -s tests -v
-python -m evaluate_corpus --nvidia
-python -m evaluate_corpus --nvidia --live
+python -m scripts.evaluate_corpus --nvidia
+python -m scripts.evaluate_corpus --nvidia --live
 ```
 
 The live evaluation command runs two model checks. The full NVIDIA evaluation

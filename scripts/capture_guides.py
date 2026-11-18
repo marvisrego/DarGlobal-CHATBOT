@@ -3,12 +3,11 @@
 import argparse
 from datetime import datetime, timezone
 import json
-from pathlib import Path
 import re
 
 from playwright.sync_api import Error, sync_playwright
 
-ROOT = Path(__file__).resolve().parent
+from corpus_snapshot import ROOT
 
 
 def main():

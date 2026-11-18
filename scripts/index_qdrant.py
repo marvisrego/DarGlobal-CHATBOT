@@ -285,6 +285,7 @@ def main():
                 print(f"{'Created' if created else 'Reused'} {name}. Verified exactly {len(payloads)} points.")
         if args.output:
             stage = "evaluation output"
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except IndexingError as error:
         parser.exit(1, f"{error}\n")
