@@ -147,6 +147,7 @@ def main():
             results.append({
                 "id": item["id"], "top_five": top_five, "retrieval_pass": retrieval_pass,
                 "facts_pass": fact_pass, "citations_pass": citation_pass, "status": response.status_code,
+                "answer": answer, "answer_path": payload.get("answer_path"), "request_id": payload.get("request_id"),
                 "inference_model": payload.get("inference_model"),
                 "inference_provider": payload.get("inference_provider"),
                 "retrieval_path": payload.get("retrieval_path"),
