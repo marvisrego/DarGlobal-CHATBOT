@@ -4,7 +4,7 @@
 .agents/
 .github/
 node_modules/
-__pycache__/
+**/__pycache__/
 .venv/
 local_html/
 snapshots/

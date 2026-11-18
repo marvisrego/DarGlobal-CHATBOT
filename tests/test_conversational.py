@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, Mock
 
 from pydantic import ValidationError
 
-from answers import Evidence
-from conversational import PropertyAssistant
-from corpus_snapshot import CorpusUnavailable, live_snapshot
-from listing_pilot import ListingFilters, ListingToolArgs
-from listing_store import resolve_filters
-from property_search import SearchResult
+from app.chat.answers import Evidence
+from app.chat.conversational import PropertyAssistant
+from app.data.corpus_snapshot import CorpusUnavailable, live_snapshot
+from app.data.listing_pilot import ListingFilters, ListingToolArgs
+from app.data.listing_store import resolve_filters
+from app.search.property_search import SearchResult
 
 
 def request(message):

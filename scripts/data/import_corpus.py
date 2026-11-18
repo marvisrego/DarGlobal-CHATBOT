@@ -6,7 +6,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from corpus_snapshot import COLUMNS, ROOT, SNAPSHOT, load_snapshot
+from app.data.corpus_snapshot import COLUMNS, ROOT, SNAPSHOT, load_snapshot
 
 
 MIGRATION = ROOT / "supabase" / "migrations" / "20261118112500_create_property_corpus.sql"

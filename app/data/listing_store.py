@@ -6,13 +6,13 @@ from psycopg import Error, connect
 from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
-from corpus_snapshot import CorpusUnavailable
-from hybrid_retrieval import HybridLookup
-from listing_pilot import (
+from app.data.corpus_snapshot import CorpusUnavailable
+from app.search.hybrid_retrieval import HybridLookup
+from app.data.listing_pilot import (
     LISTING_FIELDS, Listing, ListingFilters, ListingQuery, collection_name, listing_result, parse_listing_query,
 )
-import nvidia_api
-from property_search import SearchResult, normalized
+from app.chat import nvidia_api
+from app.search.property_search import SearchResult, normalized
 
 
 TABLE = "public.property_listing"

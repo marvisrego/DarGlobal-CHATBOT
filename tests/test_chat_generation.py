@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi.testclient import TestClient
 
-from answers import Evidence
-from openrouter_provider import GeneratedAnswer, ModelUnavailable, generated_answer, http_error_category
+from app.chat.answers import Evidence
+from app.chat.openrouter_provider import GeneratedAnswer, ModelUnavailable, generated_answer, http_error_category
 
 
 class ChatGenerationTests(unittest.TestCase):

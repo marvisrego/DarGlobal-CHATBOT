@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from corpus_snapshot import CorpusUnavailable, live_snapshot, load_snapshot
+from app.data.corpus_snapshot import CorpusUnavailable, live_snapshot, load_snapshot
 
 
 class PostgresCorpusTests(unittest.TestCase):
     @unittest.skipUnless(find_spec("psycopg"), "Postgres dependency is optional")
     def test_answer_reads_current_postgres_fields_without_using_snapshot_text(self):
-        from corpus_postgres import PostgresCorpus
-        from property_search import search
+        from app.data.corpus_postgres import PostgresCorpus
+        from app.search.property_search import search
 
         snapshot = live_snapshot("v2")
         row = load_snapshot(snapshot)["guide:dammam-badiyah"]
@@ -21,7 +21,7 @@ class PostgresCorpusTests(unittest.TestCase):
         source._ids = [row["record_id"]]
         connection = MagicMock()
         connection.execute.return_value.fetchall.return_value = [row]
-        with patch("corpus_postgres.connect") as connect:
+        with patch("app.data.corpus_postgres.connect") as connect:
             connect.return_value.__enter__.return_value = connection
             result = search("What does Wasalt say about Al Badiyah?", snapshot=snapshot.with_name("missing.jsonl"),
                             live_data=True, record_loader=source)

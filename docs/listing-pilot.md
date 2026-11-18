@@ -37,8 +37,8 @@ Keep the export in an ignored folder such as `snapshots/`. Use a UTF-8 JSON obje
 Leave unavailable facts null. Compare rows against the individual source links before publishing. Keep contact details, project valuations, starting-price ranges, and unverified attributes out of the input. Deduplicate by the publisher's stable ID, and resolve syndicated copies during source review before publishing.
 
 ```powershell
-python -m publish_listings --input snapshots/approved-listings-v1.json --release v1 --validate-only
-python -m publish_listings --input snapshots/approved-listings-v1.json --release v1
+python -m scripts.data.publish_listings --input snapshots/approved-listings-v1.json --release v1 --validate-only
+python -m scripts.data.publish_listings --input snapshots/approved-listings-v1.json --release v1
 ```
 
 The importer verifies the vector index before opening the Postgres publication transaction, so a slow embedding request leaves queries for an existing release available. A retry of identical data is safe. The v1 pilot accepts up to 10 units. The runtime Postgres connection needs read access to both listing tables, including an RLS policy if it uses a dedicated non-owner role.
@@ -56,14 +56,14 @@ The collection name selects listing release `v3` automatically. It takes precede
 The following command copies the existing NVIDIA vectors into a shared collection for a published pair.
 
 ```powershell
-python -m combine_qdrant --corpus-version v2 --listing-release v3
+python -m scripts.retrieval.combine_qdrant --corpus-version v2 --listing-release v3
 ```
 
 The command checks both source releases, then verifies the shared collection's IDs, payloads, and vectors by read-back. The already published source collections support rollback and rebuilding.
 
 ## Acceptance before expansion
 
-1. Ask for apartments in a covered city, with a specific bedroom count and currency budget. Verify every returned unit's asking amount, bedrooms, city, district and URL against the detail record. Confirm that the reply dates each observation.
+1. Ask for apartments in a covered city, with a specific bedroom count and currency budget. Verify every returned unit's asking amount, bedrooms, city, district and URL against the detail record.
 2. Repeat with a budget below all matching records. Confirm `answer_path=no_evidence` and zero listing citations.
 3. Add a published preference, such as proximity to metro stations, to a city, bedroom and budget query. Confirm `retrieval_path=qdrant` and verify every returned unit directly. The Postgres filters apply before Qdrant ranking and remain in force even when vector lookup falls back.
 

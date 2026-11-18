@@ -16,12 +16,12 @@ from dotenv import dotenv_values
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from corpus_snapshot import RELEASES, ROOT, live_snapshot, load_snapshot, snapshot_digest
-from property_search import search, valid_citation
-from property_vectors import (
+from app.data.corpus_snapshot import RELEASES, ROOT, live_snapshot, load_snapshot, snapshot_digest
+from app.search.property_search import search, valid_citation
+from app.search.property_vectors import (
     DIMENSION, EMBEDDING, MODEL, REVISION, Embedder, compatible_collection, corpus_point_id, qdrant_endpoint,
 )
-import nvidia_api
+from app.chat import nvidia_api
 
 
 LOCAL_COLLECTION = "darglobal-wasalt-minilm-v1"
@@ -285,6 +285,7 @@ def main():
                 print(f"{'Created' if created else 'Reused'} {name}. Verified exactly {len(payloads)} points.")
         if args.output:
             stage = "evaluation output"
+            args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except IndexingError as error:
         parser.exit(1, f"{error}\n")

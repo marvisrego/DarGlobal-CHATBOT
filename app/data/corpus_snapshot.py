@@ -8,7 +8,7 @@ import re
 from urllib.parse import urlsplit
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT = ROOT / "snapshots" / "property_live.jsonl"
 RELEASES = {
     "v1": ("property_live.jsonl", 11, 14, 7),

@@ -5,8 +5,8 @@ import re
 
 import httpx
 
-from answers import Evidence
-from nvidia_api import CHAT_ENDPOINT
+from app.chat.answers import Evidence
+from app.chat.nvidia_api import CHAT_ENDPOINT
 
 MODEL = "nvidia/nemotron-3.5-lightning:free"
 GUIDE_MODEL = "cohere/north-mini-code:free"

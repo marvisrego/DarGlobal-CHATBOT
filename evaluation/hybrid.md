@@ -104,7 +104,7 @@ inference, and Render performance are outside this measurement.
 ```powershell
 New-Item -ItemType Directory -Force exports | Out-Null
 python -m unittest discover -s tests -v
-python -m evaluate_corpus --hybrid --output exports/hybrid-results.json
-python -m evaluate_corpus --hybrid --openrouter --output exports/hybrid-openrouter-results.json
-python -m evaluate_corpus --benchmark
+python -m scripts.checks.evaluate_corpus --hybrid --output exports/hybrid-results.json
+python -m scripts.checks.evaluate_corpus --hybrid --openrouter --output exports/hybrid-openrouter-results.json
+python -m scripts.checks.evaluate_corpus --benchmark
 ```

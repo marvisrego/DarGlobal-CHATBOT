@@ -35,3 +35,12 @@ The collection process extracted selected public property facts and source links
 Render builds the [Dockerfile](Dockerfile) from `main` using a Python 3.13 slim base image. The image packages the FastAPI app, browser interface, and validated project and guide snapshots. Build settings select the PostgreSQL and NVIDIA vector dependencies. Uvicorn serves the app on the assigned port, and Render uses `/health` for its health check. Credentials are supplied through the service environment.
 
 The hosted app reads project, guide, and listing facts from Supabase Postgres. NVIDIA Nemotron Ultra chooses a read-only search tool when a question needs property data. Qdrant supplies semantic candidates from one shared collection with **53 vectors**. Postgres enforces the listing filters and supplies the canonical facts and links used for the answer. [Live health check](https://darglobal-chatbot-4x3v.onrender.com/health)
+
+## Repository layout
+
+| Folder | Contents |
+| --- | --- |
+| [app/](app/) | Chat and model integrations, data access, and retrieval |
+| [static/](static/) | Browser interface |
+| [scripts/](scripts/) | Data preparation, Qdrant maintenance, and demo checks |
+| [tests/](tests/) and [evaluation/](evaluation/) | Automated tests, regression prompts, and source coverage |

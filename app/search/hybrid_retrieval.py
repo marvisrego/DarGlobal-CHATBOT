@@ -27,7 +27,7 @@ class HybridLookup:
     def _initialize(self):
         from qdrant_client import QdrantClient
 
-        from property_vectors import Embedder, compatible_collection, qdrant_endpoint
+        from app.search.property_vectors import Embedder, compatible_collection, qdrant_endpoint
 
         url = qdrant_endpoint(os.environ.get("QDRANT_URL", "").strip())
         key = os.environ.get("QDRANT_API_KEY", "").strip()
@@ -48,7 +48,7 @@ class HybridLookup:
         stage = "collection initialization"
         try:
             from qdrant_client import models
-            from property_vectors import corpus_point_id
+            from app.search.property_vectors import corpus_point_id
 
             with self._lock:
                 if monotonic() < self._retry_at:

@@ -12,14 +12,13 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 import httpx
 from bs4 import BeautifulSoup
 
-from answers import (
+from app.chat.answers import (
     DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL, DAR_WEB_METHOD,
     OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, WASALT_GUIDE_URL,
 )
-from corpus_snapshot import load_snapshot, normalize_record
-from property_search import valid_citation
+from app.data.corpus_snapshot import ROOT, load_snapshot, normalize_record
+from app.search.property_search import valid_citation
 
-ROOT = Path(__file__).resolve().parent
 FIXTURES = ROOT / "ingestion_fixtures"
 FIXTURE_OUTPUT = ROOT / "snapshots" / "property_pilot.jsonl"
 MAX_PAGES = 5

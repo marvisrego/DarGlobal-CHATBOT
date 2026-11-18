@@ -9,8 +9,8 @@ from urllib.parse import urlsplit
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
-from answers import ListingCard, Source
-from property_search import BUDGET, BEDROOMS, CURRENCIES, SearchResult, includes, listing_filters, normalized, property_types
+from app.chat.answers import ListingCard, Source
+from app.search.property_search import BUDGET, BEDROOMS, CURRENCIES, SearchResult, includes, listing_filters, normalized, property_types
 
 
 PUBLISHERS = {"darglobal": "Dar Global PLC", "wasalt": "Wasalt"}

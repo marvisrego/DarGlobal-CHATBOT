@@ -20,10 +20,10 @@ capture only to prepare a new release. A fresh timestamp changes the checksum
 of the snapshot paired with the v2 cloud collection.
 
 ```powershell
-python -m capture_guides --expansion
-python -m ingest --append-corpus local_html/expansion-capture.json
+python -m scripts.data.capture_guides --expansion
+python -m scripts.data.ingest --append-corpus local_html/expansion-capture.json
 Copy-Item deploy_data/property_live_v2.jsonl snapshots/property_live.jsonl
-node export_corpus.mjs --preview
+node scripts/data/export_corpus.mjs --preview
 ```
 
 The workbook is written to `exports/property_corpus.xlsx` and independently
@@ -45,9 +45,9 @@ passage vectors before creating or writing the collection.
 
 ```powershell
 python -m pip install -r requirements.txt -r requirements-import.txt -r requirements-vector-store.txt
-python -m import_corpus --input deploy_data/property_live_v2.jsonl
-python -m import_corpus --input deploy_data/property_live_v2.jsonl
-python -m index_qdrant --nvidia --corpus-version v2
+python -m scripts.data.import_corpus --input deploy_data/property_live_v2.jsonl
+python -m scripts.data.import_corpus --input deploy_data/property_live_v2.jsonl
+python -m scripts.retrieval.index_qdrant --nvidia --corpus-version v2
 ```
 
 Both Postgres imports and both Qdrant runs read back all 37 records. An
@@ -102,10 +102,10 @@ snapshot on its own. [NVIDIA setup](nvidia.md)
 
 ```powershell
 python -m unittest discover -s tests -v
-python -m evaluate_corpus --hybrid
-python -m evaluate_corpus --corpus-version v2
-python -m evaluate_corpus --nvidia --corpus-version v2 --live
-python -m evaluate_corpus --nvidia --corpus-version v2 --corpus-backend postgres --live
+python -m scripts.checks.evaluate_corpus --hybrid
+python -m scripts.checks.evaluate_corpus --corpus-version v2
+python -m scripts.checks.evaluate_corpus --nvidia --corpus-version v2 --live
+python -m scripts.checks.evaluate_corpus --nvidia --corpus-version v2 --corpus-backend postgres --live
 ```
 
 The local runs passed 14 unit tests, all 41 v1 MiniLM regression cases, and

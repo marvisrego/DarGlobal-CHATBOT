@@ -3,11 +3,11 @@ from unittest.mock import Mock, patch
 
 import httpx
 
-from answers import Evidence
-from corpus_snapshot import live_snapshot
-from nvidia_api import DIMENSION, EMBED_MODEL, NvidiaRetrievalAPI
-from openrouter_provider import ModelUnavailable, generated_answer
-from property_search import corpus_search, search
+from app.chat.answers import Evidence
+from app.data.corpus_snapshot import live_snapshot
+from app.chat.nvidia_api import DIMENSION, EMBED_MODEL, NvidiaRetrievalAPI
+from app.chat.openrouter_provider import ModelUnavailable, generated_answer
+from app.search.property_search import corpus_search, search
 
 
 class NvidiaPipelineTests(unittest.TestCase):
