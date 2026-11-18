@@ -113,11 +113,11 @@ async def chat(
         answer_path = "abstention"
     elif not result.facts:
         answer_path = "no_evidence"
-    elif answer_provider is not None and result.rankable:
+    elif answer_provider is not None and result.rankable and result.evidence:
         try:
             model = GUIDE_MODEL if result.has_guide else MODEL
-            generated = await answer_provider.generate(request.message, result.facts, result.message, model=model)
-            answer = generated.text
+            generated = await answer_provider.generate(request.message, result.evidence, model=model)
+            answer = "\n\n".join([generated.text, *result.required_notes])
             inference_model = generated.model
             answer_path = "openrouter"
         except ModelUnavailable as error:

@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 from answers import (
     DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL,
-    OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, Source,
+    OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, Evidence, Source,
 )
 
 SNAPSHOT = Path(__file__).resolve().parent / "snapshots" / "property_pilot.jsonl"
@@ -58,6 +58,8 @@ class SearchResult:
     has_guide: bool = False
     abstain: bool = False
     retrieval_path: str = "jsonl"
+    evidence: list[Evidence] = field(default_factory=list)
+    required_notes: list[str] = field(default_factory=list)
 
 
 def normalized(text):
@@ -124,7 +126,7 @@ def matches_listing(record, filters):
     return price < amount if strict else price <= amount
 
 
-def record_fact(record):
+def record_fields(record):
     fields = [record["title"], record.get("location")]
     if record["record_type"] == "project":
         if record.get("property_type"):
@@ -144,7 +146,20 @@ def record_fact(record):
             fields.append(f"{record['bedrooms']} bedrooms")
         if record.get("area_sqm") is not None:
             fields.append(f"{record['area_sqm']:g} m²")
-    return "\n".join(filter(None, fields))
+    return list(filter(None, fields))
+
+
+def record_fact(record):
+    return "\n".join(record_fields(record))
+
+
+def answer_evidence(record):
+    is_guide = record["record_type"] == "buyer_guide"
+    return Evidence(
+        record.get("section") or record["title"], record.get("publisher") or record["source"],
+        tuple(record["points"] if is_guide else record_fields(record)[1:] or [record["title"]]),
+        is_guide,
+    )
 
 
 def property_types(terms):
@@ -310,6 +325,7 @@ def corpus_search(message, records, *, vector_lookup=None):
             abstain = True
         if terms & {"availability", "available", "inventory"}:
             notes.append("The snapshot has no verified current unit availability.")
+    required_notes = notes.copy()
     ranked = [*matched_projects, *matched_listings, *(match[2] for match in guide_candidates)][:5]
     if not ranked:
         return SearchResult(" ".join(notes) or "The snapshot has no evidence for that question.",
@@ -349,6 +365,8 @@ def corpus_search(message, records, *, vector_lookup=None):
         has_guide=guide_selected,
         abstain=abstain,
         retrieval_path=retrieval_path,
+        evidence=[answer_evidence(row) for row in chosen],
+        required_notes=required_notes,
     )
 
 
@@ -428,6 +446,8 @@ def search(message, snapshot=None, *, live_data=False, vector_lookup=None):
             )
             for record in matches
         ],
+        evidence=[answer_evidence(record) for record in matches],
+        required_notes=notes,
     )
 
 

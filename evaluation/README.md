@@ -41,10 +41,11 @@ The new retrieval matches verified project aliases and uses location and
 reported status for project group queries. It ranks guide sections by
 specific query phrases and keeps weak secondary candidates in the trace
 without citing them in the answer. Listing filters still operate on listing
-records only. The original demo used the model to order selected evidence.
-The current live route displays the model's grounded answer on success and
-attaches canonical citations from retrieval. If generation fails it displays
-a labeled source summary. Missing asking prices use a deterministic abstention.
+records only. The live route asks OpenRouter to select relevant claims from
+the retrieved passages. The server validates the claim indexes and renders
+only the selected evidence with the canonical citations. Failed or invalid
+generation displays a labeled source summary. Missing asking prices use a
+deterministic abstention.
 
 ## Results
 

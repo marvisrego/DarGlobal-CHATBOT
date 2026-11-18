@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel
@@ -21,6 +22,14 @@ class Source(BaseModel):
     publisher: str
     url: str | None = None
     fixture: bool = False
+
+
+@dataclass(frozen=True)
+class Evidence:
+    title: str
+    publisher: str
+    claims: tuple[str, ...]
+    is_guide: bool = False
 
 
 class ChatReply(BaseModel):
