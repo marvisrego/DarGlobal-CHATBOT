@@ -1,0 +1,261 @@
+"use strict";
+
+const byId = (id) => document.getElementById(id);
+const form = byId("composer");
+const input = byId("message");
+const send = byId("send");
+const thread = byId("thread");
+const viewport = byId("viewport");
+const historyList = byId("history");
+const sidebar = byId("sidebar");
+const menu = byId("menu");
+const scrim = byId("scrim");
+const main = document.querySelector("main");
+const phone = matchMedia("(max-width: 720px)");
+const composerArea = byId("composer-area");
+const storageKey = "darglobal-property-chat-v1";
+const pending = new Map();
+const live = document.body.dataset.mode === "live";
+const pendingMessage = live
+  ? "Waiting for the model."
+  : document.body.dataset.dataMode === "live"
+    ? "Looking through the property snapshot."
+    : "Looking through the sample records.";
+
+function readState() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey));
+    if (Array.isArray(stored?.chats)) return stored;
+  } catch {
+    // The app can still run if storage is unavailable.
+  }
+  return { activeId: null, chats: [] };
+}
+
+const state = readState();
+
+function save() {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    // Keep this session usable in browsers that block or limit storage.
+  }
+}
+
+function activeChat() {
+  return state.chats.find((chat) => chat.id === state.activeId);
+}
+
+function element(tag, className, value) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (value !== undefined) node.textContent = value;
+  return node;
+}
+
+function updateComposer() {
+  input.style.height = "auto";
+  input.style.height = `${Math.min(128, input.scrollHeight)}px`;
+  send.disabled = !input.value.trim() || pending.has(activeChat()?.id);
+}
+
+function placeComposer() {
+  const destination = byId(!phone.matches && !activeChat() ? "welcome-composer" : "thread-composer");
+  if (composerArea.parentElement === destination) return;
+
+  const focused = composerArea.contains(document.activeElement) ? document.activeElement : null;
+  destination.append(composerArea);
+  focused?.focus({ preventScroll: true });
+}
+
+function setDrawer(open, focusTarget) {
+  const visible = open && phone.matches;
+  sidebar.classList.toggle("open", visible);
+  menu.setAttribute("aria-expanded", String(visible));
+  scrim.hidden = !visible;
+  main.inert = visible;
+  if (visible) {
+    sidebar.setAttribute("role", "dialog");
+    sidebar.setAttribute("aria-modal", "true");
+    byId("new-chat").focus();
+  } else {
+    sidebar.removeAttribute("role");
+    sidebar.removeAttribute("aria-modal");
+    focusTarget?.focus();
+  }
+}
+
+function renderHistory() {
+  historyList.replaceChildren();
+  byId("empty-history").hidden = state.chats.length > 0;
+  for (const chat of state.chats) {
+    const li = element("li");
+    const button = element("button", "", chat.title);
+    button.type = "button";
+    if (chat.id === state.activeId) button.setAttribute("aria-current", "true");
+    button.addEventListener("click", () => selectChat(chat.id));
+    li.append(button);
+    historyList.append(li);
+  }
+}
+
+function renderSources(data) {
+  const list = element("ul", "sources");
+  list.setAttribute("aria-label", "Sources");
+  for (const source of data.sources) {
+    const card = element("li");
+    const sample = source.fixture ?? (data.mode === "mock");
+    card.append(element("small", "", sample ? `Sample source: ${source.publisher}` : source.publisher));
+    if (!sample && /^https?:\/\//i.test(source.url || "")) {
+      const link = element("a", "", source.title);
+      link.href = source.url;
+      card.append(link);
+    } else {
+      card.append(element("strong", "", source.title));
+    }
+    list.append(card);
+  }
+  return list;
+}
+
+function renderConversation({ scroll = false } = {}) {
+  const chat = activeChat();
+  byId("welcome").hidden = Boolean(chat);
+  thread.hidden = !chat;
+  placeComposer();
+  thread.replaceChildren();
+  for (const turn of chat?.turns || []) {
+    const article = element("article", "turn");
+    article.setAttribute("aria-label", "Question and answer");
+    const question = element("p", "question", turn.message);
+    question.prepend(element("span", "sr-only", "You: "));
+    const reply = element("div", "reply");
+    reply.append(element("h2", "", "Research assistant"));
+    if (turn.response) {
+      for (const paragraph of turn.response.answer.split("\n\n")) {
+        reply.append(element("p", "", paragraph));
+      }
+      if (turn.response.sources.length) reply.append(renderSources(turn.response));
+    } else if (pending.get(chat.id) === turn) {
+      reply.append(element("p", "pending", pendingMessage));
+    } else {
+      reply.append(element("p", "", "The answer didn’t load. Retry to send the same question again."));
+      const retry = element("button", "retry", "Retry");
+      retry.type = "button";
+      retry.disabled = pending.has(chat.id);
+      retry.addEventListener("click", () => {
+        input.focus();
+        requestAnswer(chat, turn);
+      });
+      reply.append(retry);
+    }
+    article.append(question, reply);
+    thread.append(article);
+  }
+  updateComposer();
+  if (scroll) viewport.scrollTop = viewport.scrollHeight;
+}
+
+function selectChat(id) {
+  state.activeId = id;
+  save();
+  input.value = "";
+  renderHistory();
+  renderConversation({ scroll: true });
+  setDrawer(false, input);
+}
+
+async function requestAnswer(chat, turn) {
+  pending.set(chat.id, turn);
+  const announcement = byId("announcement");
+  announcement.textContent = pendingMessage;
+  renderConversation({ scroll: true });
+  let status = "Answer ready.";
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: turn.message }),
+      signal: AbortSignal.timeout(live ? 45000 : 15000),
+    });
+    if (!response.ok) throw new Error("Chat request failed");
+    turn.response = await response.json();
+  } catch {
+    status = "The answer didn’t load. Retry is available.";
+  } finally {
+    pending.delete(chat.id);
+    save();
+    if (state.activeId === chat.id) {
+      announcement.textContent = status;
+      const nearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+      renderConversation({ scroll: nearBottom });
+    }
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const message = input.value.trim();
+  if (!message || pending.has(activeChat()?.id)) return;
+
+  let chat = activeChat();
+  if (!chat) {
+    chat = { id: crypto.randomUUID(), title: message.replace(/\s+/g, " ").slice(0, 65), turns: [] };
+    state.activeId = chat.id;
+  }
+  state.chats = [chat, ...state.chats.filter((item) => item !== chat)];
+  const turn = { message, response: null };
+  chat.turns.push(turn);
+  input.value = "";
+  input.focus();
+  save();
+  renderHistory();
+  requestAnswer(chat, turn);
+});
+
+input.addEventListener("input", updateComposer);
+input.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    if (!send.disabled) form.requestSubmit();
+  }
+});
+for (const example of document.querySelectorAll(".examples button")) {
+  example.addEventListener("click", () => {
+    input.value = example.querySelector("[data-question]").textContent;
+    updateComposer();
+    input.focus();
+  });
+}
+
+byId("new-chat").addEventListener("click", () => selectChat(null));
+menu.addEventListener("click", () => setDrawer(true));
+scrim.addEventListener("click", () => setDrawer(false, menu));
+phone.addEventListener("change", () => {
+  const drawerWasOpen = !scrim.hidden;
+  setDrawer(false, drawerWasOpen ? input : undefined);
+  placeComposer();
+  updateComposer();
+});
+sidebar.addEventListener("keydown", (event) => {
+  if (scrim.hidden) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    setDrawer(false, menu);
+  }
+  if (event.key === "Tab") {
+    const buttons = sidebar.querySelectorAll("button");
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+});
+
+renderHistory();
+renderConversation({ scroll: true });
