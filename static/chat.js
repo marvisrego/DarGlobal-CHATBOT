@@ -16,7 +16,11 @@ const composerArea = byId("composer-area");
 const storageKey = "darglobal-property-chat-v1";
 const pending = new Map();
 const live = document.body.dataset.mode === "live";
-const pendingMessage = live ? "Waiting for the model…" : "Looking through the sample records…";
+const pendingMessage = live
+  ? "Waiting for the model…"
+  : document.body.dataset.dataMode === "live"
+    ? "Looking through the saved property pages…"
+    : "Looking through the sample records…";
 
 function readState() {
   try {
@@ -100,7 +104,7 @@ function renderSources(data) {
   list.setAttribute("aria-label", "Sources");
   for (const source of data.sources) {
     const card = element("li");
-    const sample = data.mode === "mock";
+    const sample = source.fixture ?? (data.mode === "mock");
     card.append(element("small", "", sample ? `Sample source · ${source.publisher}` : source.publisher));
     if (!sample && /^https?:\/\//i.test(source.url || "")) {
       const link = element("a", "", source.title);

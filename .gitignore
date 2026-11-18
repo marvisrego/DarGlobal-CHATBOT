@@ -1,3 +1,6 @@
 __pycache__/
 .venv/
 .env
+node_modules/
+/snapshots/
+/local_html/

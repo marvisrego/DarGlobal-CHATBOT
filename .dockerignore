@@ -1,1 +1,10 @@
 .env
+.env.*
+.git/
+.agents/
+.github/
+node_modules/
+__pycache__/
+.venv/
+local_html/
+snapshots/

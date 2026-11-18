@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: darglobal-chatbot
+    runtime: docker
+    plan: free
+    branch: dev
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: CHAT_MODE
+        value: live
+      - key: PROPERTY_DATA_MODE
+        value: fixture
+      - key: OPENROUTER_API_KEY
+        sync: false

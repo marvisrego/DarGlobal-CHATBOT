@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/chat.js" defer></script>
 </head>
-<body data-mode="mock">
+<body data-mode="mock" data-data-mode="fixture">
   <aside class="sidebar" id="sidebar" aria-label="Conversation sidebar">
     <div class="identity"><span class="mark" aria-hidden="true"></span><span>DarGlobal<small>Property research</small></span></div>
     <button class="new-chat" id="new-chat" type="button"><span aria-hidden="true">+</span> New chat</button>
@@ -24,7 +24,7 @@
     <header class="topbar">
       <button id="menu" type="button" aria-label="Open conversation drawer" aria-controls="sidebar" aria-expanded="false">☰</button>
       <span class="app-name">Property Research Assistant</span>
-      <span class="preview"><span aria-hidden="true"></span>Preview · sample data</span>
+      <span class="preview"><span aria-hidden="true"></span>Preview · Sample data</span>
     </header>
     <div class="viewport" id="viewport">
       <section class="welcome" id="welcome" aria-labelledby="welcome-heading">
@@ -33,9 +33,9 @@
         <p class="intro">Research DarGlobal developments, explore Wasalt listings, or compare what each source can tell you.</p>
         <div id="welcome-composer"></div>
         <div class="examples" aria-label="Example questions">
-          <button type="button"><span class="example-kind">Development</span><span data-question>What should I know about DarGlobal’s AIDA development?</span><span class="insert" aria-hidden="true">↗</span></button>
-          <button type="button"><span class="example-kind">Budget search</span><span data-question>Find Wasalt apartments in Riyadh under SAR 1 million.</span><span class="insert" aria-hidden="true">↗</span></button>
-          <button type="button"><span class="example-kind">Comparison</span><span data-question>Compare DarGlobal’s AIDA with the sample Wasalt listings.</span><span class="insert" aria-hidden="true">↗</span></button>
+          <button type="button"><span class="example-kind">Development</span><span data-question>What is the status of Sample Harbour Residences?</span><span class="insert" aria-hidden="true">↗</span></button>
+          <button type="button"><span class="example-kind">Budget search</span><span data-question>Find Wasalt apartments with 2 bedrooms under SAR 1 million.</span><span class="insert" aria-hidden="true">↗</span></button>
+          <button type="button"><span class="example-kind">Comparison</span><span data-question>Show Sample Harbour Residences alongside Wasalt listings under SAR 1 million.</span><span class="insert" aria-hidden="true">↗</span></button>
         </div>
       </section>
       <section class="thread" id="thread" aria-label="Conversation" hidden></section>
