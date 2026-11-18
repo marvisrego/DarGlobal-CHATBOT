@@ -2,6 +2,7 @@ import json
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -32,6 +33,16 @@ PROJECT_SCORE_FLOOR = 0.22
 NVIDIA_PROJECT_SCORE_FLOOR = 0.15
 GUIDE_SCORE_FLOOR = 0.28
 SINGLE_PROJECT_LOCATION = re.compile(r"\b(?:where (?:is|was)|(?:what|which) (?:city|country))\b")
+DEVELOPMENT_VALUE = re.compile(
+    r"\b(?:gdv|(?:development|project) (?:value|valuation)|"
+    r"(?:value|valuation) of (?:the |this )?(?:development|project))\b"
+)
+GEOGRAPHIC_GUIDE = re.compile(r"wasalt (.+) (?:district|neighbou?rhood) guide")
+GUIDE_STOP_WORDS = {
+    "about", "according", "area", "describe", "described", "describes", "district", "guide", "have",
+    "highlight", "highlights", "into", "neighborhood", "neighbourhood", "that", "their", "there",
+    "these", "this", "those", "wasalt", "what", "where", "which", "with", "would",
+}
 GUIDE_TOPICS = re.compile(
     r"\b(?:buy\w*|own\w*|sell\w*|rent\w*|lease\w*|tenan\w*|home\w*|hous\w*|propert\w*|"
     r"apartments?|condo\w*|build\w*|mainten\w*|repairs?|neighbou?r\w*|districts?|ejar|park|"
@@ -180,6 +191,50 @@ def matches_project_filters(record, locations, types, complete, constructing):
     )
 
 
+def mentions_source_date(query, record):
+    if not record.get("source_as_of"):
+        return False
+    published = date.fromisoformat(record["source_as_of"])
+    month = published.strftime("%B").casefold()
+    return any(includes(query, spelling) for spelling in (
+        normalized(published.isoformat()), f"{published.day} {month} {published.year}",
+        f"{month} {published.day} {published.year}",
+    ))
+
+
+def guide_scope(query, guides, places):
+    places = places | {
+        match[1] for row in guides if (match := GEOGRAPHIC_GUIDE.fullmatch(normalized(row["title"])))
+    }
+    requested = {place for place in places if includes(query, place)}
+    eligible = []
+    local = []
+    for row in guides:
+        label = normalized(f"{row['title']} {urlsplit(row['canonical_url']).path}")
+        guide_places = {place for place in places if includes(label, place)}
+        if not requested or not guide_places or requested & guide_places:
+            eligible.append(row)
+        if requested & guide_places:
+            local.append(row)
+    return eligible, local
+
+
+def descriptive_guide_matches(terms, local_guides):
+    def keywords(words):
+        return {word.removesuffix("s") for word in words if len(word) >= 4} - GUIDE_STOP_WORDS
+
+    requested = keywords(terms)
+    matches = []
+    for row in local_guides:
+        headings = keywords(normalized(f"{row['title']} {row['section']}").split())
+        evidence = keywords(normalized(" ".join(row["points"])).split())
+        score = len(requested & (evidence - headings))
+        if score >= 2:
+            matches.append((score, row["record_id"], row))
+    best = max((score for score, _, _ in matches), default=0)
+    return [match for match in matches if match[0] == best]
+
+
 def one_typo(left, right):
     if len(left) > len(right):
         left, right = right, left
@@ -220,19 +275,17 @@ def rerank_passages(message, rows, rerank):
     return [rows[index] for index in rerank(message, texts)]
 
 
-def recover_corpus_match(message, query, records, vector_lookup, *, guides, project_ids, rerank=None):
-    if not guides and not project_ids:
+def recover_corpus_match(message, query, records, vector_lookup, *, guide_ids, project_ids, rerank=None):
+    if not guide_ids and not project_ids:
         return None, "jsonl"
     semantic_query = message
-    if guides and any(includes(query, term) for term in ("rush hour", "peak traffic", "trial drive")):
+    if guide_ids and any(includes(query, term) for term in ("rush hour", "peak traffic", "trial drive")):
         semantic_query += " test the commute to work before signing a lease"
     by_id = {row["record_id"]: row for row in records if row.get("record_id")}
     if rerank is None:
         hits = vector_lookup(semantic_query)
     else:
-        eligible_ids = project_ids | {key for key, row in by_id.items()
-                                      if guides and row["record_type"] == "buyer_guide"}
-        hits = vector_lookup(semantic_query, eligible_ids=eligible_ids)
+        hits = vector_lookup(semantic_query, eligible_ids=project_ids | guide_ids)
     if hits is None:
         return None, "jsonl_after_qdrant_failure"
     project_floor = PROJECT_SCORE_FLOOR if rerank is None else NVIDIA_PROJECT_SCORE_FLOOR
@@ -241,7 +294,7 @@ def recover_corpus_match(message, query, records, vector_lookup, *, guides, proj
         return rerank_passages(message, projects, rerank)[0], "qdrant"
     sections = [
         by_id[key] for key, score in hits
-        if guides and score >= GUIDE_SCORE_FLOOR and by_id.get(key, {}).get("record_type") == "buyer_guide"
+        if key in guide_ids and score >= GUIDE_SCORE_FLOOR
     ]
     if sections:
         return rerank_passages(message, sections, rerank)[0], "qdrant"
@@ -252,6 +305,7 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
     query = normalized(message)
     projects = [row for row in records if row["record_type"] == "project"]
     terms = set(query.split())
+    wants_development_value = bool(DEVELOPMENT_VALUE.search(query))
     named = [
         row for row in projects if any(
             includes(query, normalized(alias)) for alias in (row["title"], *row.get("aliases", []))
@@ -280,17 +334,25 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
     ] if not named and (vector_lookup is not None or (project_intent and locations)) else []
     if not named and not possible_names and project_intent and locations and not SINGLE_PROJECT_LOCATION.search(query):
         matched_projects = [row for row in projects if matches_project_filters(row, locations, types, complete, constructing)]
+        if wants_development_value:
+            valued = [row for row in matched_projects if row.get("development_value")]
+            matched_projects = [row for row in valued if mentions_source_date(query, row)] or valued
+    guides = [row for row in records if row["record_type"] == "buyer_guide" and row.get("record_id")]
+    cities = {normalized(row["location"].split(", ")[0]) for row in projects if row.get("location")}
+    guides, local_guides = guide_scope(query, guides, cities)
     guide_candidates = []
-    if not listing_intent:
+    if not listing_intent and (wants_wasalt or not project_intent):
         alias_query = query if BUDGET.search(message) else guide_alias_query(query, terms)
-        for row in records:
-            if row["record_type"] != "buyer_guide" or not row.get("record_id"):
-                continue
+        for row in guides:
             aliases = [normalized(alias) for alias in row.get("aliases", [])]
             hits = [alias for alias in aliases if includes(alias_query, alias)]
-            if hits and (wants_wasalt or not project_intent):
+            if hits:
                 score = sum(1 if alias == "off plan" else 1 + len(alias.split()) ** 2 for alias in hits)
                 guide_candidates.append((score, row["record_id"], row))
+        if not any(score > 1 for score, _, _ in guide_candidates) and (
+            wants_wasalt or (not possible_names and GUIDE_TOPICS.search(query))
+        ):
+            guide_candidates.extend(descriptive_guide_matches(terms, local_guides))
     guide_candidates.sort(key=lambda match: (-match[0], match[1]))
     matched_listings = []
     notes = []
@@ -325,7 +387,9 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
             not project_intent and not possible_names and not implicit_listing and bool(GUIDE_TOPICS.search(query))
         )
         recovered, retrieval_path = recover_corpus_match(
-            message, query, records, vector_lookup, guides=guide_intent, project_ids=project_ids, rerank=rerank
+            message, query, records, vector_lookup,
+            guide_ids={row["record_id"] for row in guides} if guide_intent else set(),
+            project_ids=project_ids, rerank=rerank,
         )
         if recovered and recovered["record_type"] == "project":
             matched_projects = [recovered]
@@ -344,8 +408,14 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
         notes.append("No matching DarGlobal project is in the real property snapshot.")
     if matched_projects:
         if terms & {"price", "pricing", "cost", "asking"}:
-            notes.append("The snapshot has no verified asking price for these projects.")
-            abstain = True
+            if wants_development_value and any(row.get("development_value") for row in matched_projects):
+                notes.append(
+                    "Development value applies to the project as a whole. "
+                    "The cited sources provide no verified asking price for a home."
+                )
+            else:
+                notes.append("The snapshot has no verified asking price for these projects.")
+                abstain = True
         if terms & {"availability", "available", "inventory"}:
             notes.append("The snapshot has no verified current unit availability.")
     required_notes = notes.copy()
@@ -379,12 +449,11 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
     guide_selected = any(row["record_type"] == "buyer_guide" for row in chosen)
     if guide_selected:
         notes.append("Source: Wasalt.sa for the guide notes.")
-    include_development_value = not abstain or "gdv" in terms or includes(query, "development value")
     return SearchResult(
         message=" ".join(["Based on the cited sources.", *notes]),
         facts=[
             f"{row['section']}: {' '.join(row['points'])}" if row["record_type"] == "buyer_guide"
-            else record_fact(row, include_development_value=include_development_value) for row in chosen
+            else record_fact(row, include_development_value=not abstain) for row in chosen
         ],
         sources=[
             Source(title=row.get("section") or row["title"], publisher=row.get("publisher") or row["source"],

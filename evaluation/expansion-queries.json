@@ -24,5 +24,33 @@
     "facts": ["no verified asking price"],
     "forbidden": ["USD 1 billion"],
     "answer_path": "abstention"
+  },
+  {
+    "id": "jeddah-development-value-and-asking-price",
+    "question": "What estimated gross development value did DarGlobal announce for its new mixed-use Jeddah project on 16 November 2026? Is that an asking price for a home?",
+    "expected": ["project:jeddah-november-2026"],
+    "facts": ["approximately SAR 1 billion", "development value applies to the project as a whole", "no verified asking price for a home"],
+    "forbidden": ["Trump Plaza", "Amaya", "Padel Living", "over USD 1 billion"]
+  },
+  {
+    "id": "jeddah-development-value-and-asking-price-paraphrase",
+    "question": "What was the project valuation in Dar Global's November 16, 2026 announcement about the mixed-use development in Jeddah, and does that figure tell me the sale price of a unit?",
+    "expected": ["project:jeddah-november-2026"],
+    "facts": ["approximately SAR 1 billion", "development value applies to the project as a whole", "no verified asking price for a home"],
+    "forbidden": ["Trump Plaza", "Amaya", "Padel Living", "over USD 1 billion"]
+  },
+  {
+    "id": "jeddah-neighborhood-descriptions",
+    "question": "According to Wasalt's Jeddah neighborhood guide, which neighborhood is described as being on the waterfront, and which has schools and healthcare facilities nearby?",
+    "expected": ["guide:jeddah-neighborhoods"],
+    "facts": ["Al Shati as a waterfront neighborhood", "Al Zahraa for nearby healthcare, schools"],
+    "forbidden": ["Riyadh"]
+  },
+  {
+    "id": "jeddah-neighborhood-descriptions-paraphrase",
+    "question": "Which areas in Jeddah does Wasalt put by the waterfront and near schools and healthcare, respectively?",
+    "expected": ["guide:jeddah-neighborhoods"],
+    "facts": ["Al Shati as a waterfront neighborhood", "Al Zahraa for nearby healthcare, schools"],
+    "forbidden": ["Riyadh"]
   }
 ]

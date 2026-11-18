@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 import httpx
 
 from answers import Evidence
+from corpus_snapshot import live_snapshot
 from nvidia_api import DIMENSION, EMBED_MODEL, NvidiaRetrievalAPI
 from openrouter_provider import ModelUnavailable, generated_answer
 from property_search import corpus_search, search
@@ -61,6 +62,22 @@ class NvidiaPipelineTests(unittest.TestCase):
         result = search("Where is Les Vauges?", live_data=True, vector_lookup=lookup, rerank=rerank)
         lookup.assert_called_once_with("Where is Les Vauges?", eligible_ids={"project:les-vagues"})
         self.assertEqual(result.passage_ids, ["project:les-vagues"])
+        self.assertEqual(result.retrieval_path, "qdrant")
+        rerank.assert_not_called()
+
+    def test_hosted_guide_recovery_filters_other_cities_before_ranking(self):
+        lookup = Mock(return_value=[("guide:districts-transit", 0.9), ("guide:jeddah-neighborhoods", 0.4)])
+        rerank = Mock()
+        result = search(
+            "Which Jeddah districts does Wasalt recommend for cyclists?",
+            snapshot=live_snapshot("v2"), live_data=True, vector_lookup=lookup, rerank=rerank,
+        )
+        eligible = lookup.call_args.kwargs["eligible_ids"]
+        self.assertIn("guide:jeddah-neighborhoods", eligible)
+        self.assertIn("guide:buyer-checks", eligible)
+        self.assertNotIn("guide:districts-transit", eligible)
+        self.assertNotIn("guide:dammam-faisaliah", eligible)
+        self.assertEqual(result.passage_ids, ["guide:jeddah-neighborhoods"])
         self.assertEqual(result.retrieval_path, "qdrant")
         rerank.assert_not_called()
 
