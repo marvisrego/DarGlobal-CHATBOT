@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from statistics import median, quantiles
 from time import perf_counter
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -64,30 +65,33 @@ def benchmark_embeddings():
 def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--openrouter", action="store_true", help="Run only the two live model checks")
+    group.add_argument("--live", "--openrouter", dest="live", action="store_true", help="Run only the two live model checks")
     group.add_argument("--benchmark", action="store_true", help="Measure local query encoding only")
-    parser.add_argument("--hybrid", action="store_true", help="Use Qdrant and include the hybrid regression cases")
+    retrieval = parser.add_mutually_exclusive_group()
+    retrieval.add_argument("--hybrid", action="store_true", help="Use MiniLM Qdrant retrieval and include recovery cases")
+    retrieval.add_argument("--nvidia", action="store_true", help="Use hosted NVIDIA retrieval and include recovery cases")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.benchmark:
         benchmark_embeddings()
         return 0
     os.environ.update(
-        CHAT_MODE="live" if args.openrouter else "mock", PROPERTY_DATA_MODE="live",
-        PROPERTY_RETRIEVAL_MODE="hybrid" if args.hybrid else "jsonl",
+        CHAT_MODE="live" if args.live else "mock", PROPERTY_DATA_MODE="live",
+        PROPERTY_RETRIEVAL_MODE="nvidia" if args.nvidia else "hybrid" if args.hybrid else "jsonl",
+        CHAT_PROVIDER="nvidia" if args.nvidia else "openrouter",
     )
-    from main import app, vector_lookup
+    from main import app
 
     questions = json.loads((ROOT / "evaluation/questions.json").read_text(encoding="utf-8"))
-    if args.hybrid:
+    if args.hybrid or args.nvidia:
         additional = json.loads((ROOT / "evaluation/qdrant-queries.json").read_text(encoding="utf-8"))
         additional = [{**item, "facts": RECOVERY_FACTS[item["id"]]} for item in additional]
-        if args.openrouter:
+        if args.live:
             questions = [item for item in additional if item["id"] in {"tierra-typo", "paperwork-paraphrase"}]
         else:
             new = json.loads((ROOT / "evaluation/hybrid-queries.json").read_text(encoding="utf-8"))
             questions += additional + new
-    elif args.openrouter:
+    elif args.live:
         questions = [next(item for item in questions if item["id"] == "compare"), LIVE_GUIDE_CASE]
     records = {
         row["record_id"]: row
@@ -95,13 +99,21 @@ def main():
         if (row := json.loads(line)).get("record_id")
     }
     results = []
-    with TestClient(app) as client:
+    retrieved = []
+
+    def trace_search(*args, **kwargs):
+        result = search(*args, **kwargs)
+        retrieved.append(result)
+        return result
+
+    with TestClient(app) as client, patch("main.search", side_effect=trace_search):
         for item in questions:
-            retrieved = search(item["question"], live_data=True, vector_lookup=vector_lookup)
-            top_five = retrieved.passage_ids
+            start = perf_counter()
+            response = client.post("/api/chat", json={"message": item["question"]})
+            elapsed = perf_counter() - start
+            top_five = retrieved.pop().passage_ids
             expected = set(item["expected"])
             retrieval_pass = expected.issubset(top_five) if expected else not top_five
-            response = client.post("/api/chat", json={"message": item["question"]})
             payload = response.json()
             answer = payload.get("answer", "")
             expected_citations = {
@@ -120,13 +132,15 @@ def main():
             fact_pass = response.is_success and all(
                 normalized_fact(fact) in normalized_fact(answer) for fact in item["facts"]
             )
-            if args.openrouter:
+            if args.live:
                 fact_pass = fact_pass and bool(payload.get("inference_model"))
             results.append({
                 "id": item["id"], "top_five": top_five, "retrieval_pass": retrieval_pass,
                 "facts_pass": fact_pass, "citations_pass": citation_pass, "status": response.status_code,
                 "inference_model": payload.get("inference_model"),
-                "citations": actual_sources, "error": payload.get("detail"),
+                "inference_provider": payload.get("inference_provider"),
+                "retrieval_path": payload.get("retrieval_path"),
+                "seconds": round(elapsed, 4), "citations": actual_sources, "error": payload.get("detail"),
             })
     for key in ("retrieval_pass", "facts_pass", "citations_pass"):
         print(f"{key}: {sum(result[key] for result in results)}/{len(results)}")

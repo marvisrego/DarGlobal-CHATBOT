@@ -30,6 +30,7 @@ PROPERTY_TYPES = {
 }
 PROJECT_NAME_WORDS = {"interiors", "tower", "development", "project", "residences"}
 PROJECT_SCORE_FLOOR = 0.22
+NVIDIA_PROJECT_SCORE_FLOOR = 0.15
 GUIDE_SCORE_FLOOR = 0.28
 SINGLE_PROJECT_LOCATION = re.compile(r"\b(?:where (?:is|was)|(?:what|which) (?:city|country))\b")
 GUIDE_TOPICS = re.compile(
@@ -206,26 +207,46 @@ def project_name_evidence(query, record):
     return False
 
 
-def recover_corpus_match(message, query, records, vector_lookup, *, guides, project_ids):
+def rerank_passages(message, rows, rerank):
+    if rerank is None or len(rows) < 2:
+        return rows
+    texts = [
+        f"{row['title']}\n{row['section']}\n{' '.join(row['points'])}"
+        if row["record_type"] == "buyer_guide" else record_fact(row)
+        for row in rows
+    ]
+    return [rows[index] for index in rerank(message, texts)]
+
+
+def recover_corpus_match(message, query, records, vector_lookup, *, guides, project_ids, rerank=None):
     if not guides and not project_ids:
         return None, "jsonl"
     semantic_query = message
     if guides and any(includes(query, term) for term in ("rush hour", "peak traffic", "trial drive")):
         semantic_query += " test the commute to work before signing a lease"
-    hits = vector_lookup(semantic_query)
+    by_id = {row["record_id"]: row for row in records if row.get("record_id")}
+    if rerank is None:
+        hits = vector_lookup(semantic_query)
+    else:
+        eligible_ids = project_ids | {key for key, row in by_id.items()
+                                      if guides and row["record_type"] == "buyer_guide"}
+        hits = vector_lookup(semantic_query, eligible_ids=eligible_ids)
     if hits is None:
         return None, "jsonl_after_qdrant_failure"
-    by_id = {row["record_id"]: row for row in records if row.get("record_id")}
-    for key, score in hits:
-        if key in project_ids and score >= PROJECT_SCORE_FLOOR:
-            return by_id[key], "qdrant"
-    for key, score in hits:
-        if guides and score >= GUIDE_SCORE_FLOOR and by_id.get(key, {}).get("record_type") == "buyer_guide":
-            return by_id[key], "qdrant"
+    project_floor = PROJECT_SCORE_FLOOR if rerank is None else NVIDIA_PROJECT_SCORE_FLOOR
+    projects = [by_id[key] for key, score in hits if key in project_ids and score >= project_floor]
+    if projects:
+        return rerank_passages(message, projects, rerank)[0], "qdrant"
+    sections = [
+        by_id[key] for key, score in hits
+        if guides and score >= GUIDE_SCORE_FLOOR and by_id.get(key, {}).get("record_type") == "buyer_guide"
+    ]
+    if sections:
+        return rerank_passages(message, sections, rerank)[0], "qdrant"
     return None, "jsonl"
 
 
-def corpus_search(message, records, *, vector_lookup=None):
+def corpus_search(message, records, *, vector_lookup=None, rerank=None):
     query = normalized(message)
     projects = [row for row in records if row["record_type"] == "project"]
     terms = set(query.split())
@@ -302,7 +323,7 @@ def corpus_search(message, records, *, vector_lookup=None):
             not project_intent and not possible_names and not implicit_listing and bool(GUIDE_TOPICS.search(query))
         )
         recovered, retrieval_path = recover_corpus_match(
-            message, query, records, vector_lookup, guides=guide_intent, project_ids=project_ids
+            message, query, records, vector_lookup, guides=guide_intent, project_ids=project_ids, rerank=rerank
         )
         if recovered and recovered["record_type"] == "project":
             matched_projects = [recovered]
@@ -326,16 +347,26 @@ def corpus_search(message, records, *, vector_lookup=None):
         if terms & {"availability", "available", "inventory"}:
             notes.append("The snapshot has no verified current unit availability.")
     required_notes = notes.copy()
-    ranked = [*matched_projects, *matched_listings, *(match[2] for match in guide_candidates)][:5]
+    candidates = [*matched_projects, *matched_listings, *(match[2] for match in guide_candidates)]
+    ranked = candidates[:5]
     if not ranked:
         return SearchResult(" ".join(notes) or "The snapshot has no evidence for that question.",
                             retrieval_path=retrieval_path)
     # Show specific matches and retain weaker candidates only in the retrieval trace.
     best = guide_candidates[0][0] if guide_candidates else 0
     shown = {key for score, key, _ in guide_candidates if score >= best / 2}
-    chosen = [
-        row for row in ranked if row["record_type"] != "buyer_guide" or row["record_id"] in shown
+    eligible = [
+        row for row in candidates if row["record_type"] != "buyer_guide" or row["record_id"] in shown
     ]
+    if rerank is None:
+        chosen = [row for row in ranked if row in eligible]
+    else:
+        # Reserve the structured matches before allowing any guide to take their place.
+        protected = eligible[:min(len(matched_projects) + len(matched_listings), 5)]
+        ordered = rerank_passages(message, eligible[:8], rerank)
+        chosen = [row for row in ordered if row in protected]
+        chosen += [row for row in ordered if row not in protected][:5 - len(protected)]
+        ranked = (chosen + [row for row in candidates if row not in chosen])[:5]
     if len(matched_projects) > 1 and len({row.get("status") for row in matched_projects}) == 1:
         if all(row.get("status") and row.get("source_as_of") for row in matched_projects):
             date = matched_projects[0]["source_as_of"]
@@ -370,7 +401,7 @@ def corpus_search(message, records, *, vector_lookup=None):
     )
 
 
-def search(message, snapshot=None, *, live_data=False, vector_lookup=None):
+def search(message, snapshot=None, *, live_data=False, vector_lookup=None, rerank=None):
     snapshot = (LIVE_SNAPSHOT if live_data else SNAPSHOT) if snapshot is None else snapshot
     description = "real property" if live_data else "sample property"
     if not snapshot.is_file():
@@ -385,7 +416,7 @@ def search(message, snapshot=None, *, live_data=False, vector_lookup=None):
             if valid_citation(record)
         ]
         if any(record.get("record_id") for record in selected):
-            return corpus_search(message, selected, vector_lookup=vector_lookup)
+            return corpus_search(message, selected, vector_lookup=vector_lookup, rerank=rerank)
     projects = [record for record in selected if (record["source"], record["record_type"]) == ("DarGlobal", "project")]
     listings = [record for record in selected if (record["source"], record["record_type"]) == ("Wasalt", "listing")]
     query = normalized(message)

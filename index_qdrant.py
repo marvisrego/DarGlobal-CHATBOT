@@ -2,11 +2,11 @@
 
 import argparse
 from collections import Counter
-from contextlib import closing
+from contextlib import ExitStack, closing
+from functools import partial
 import json
 from pathlib import Path
 import re
-from uuid import NAMESPACE_URL, uuid5
 
 from dotenv import dotenv_values
 from qdrant_client import QdrantClient, models
@@ -14,7 +14,10 @@ from qdrant_client.http.exceptions import UnexpectedResponse
 
 from corpus_snapshot import ROOT, SNAPSHOT, load_snapshot
 from property_search import search, valid_citation
-from property_vectors import DIMENSION, EMBEDDING, MODEL, REVISION, Embedder, compatible_collection, qdrant_endpoint
+from property_vectors import (
+    DIMENSION, EMBEDDING, MODEL, REVISION, Embedder, compatible_collection, corpus_point_id, qdrant_endpoint,
+)
+import nvidia_api
 
 
 LOCAL_COLLECTION = "darglobal-wasalt-minilm-v1"
@@ -37,7 +40,7 @@ def load_payloads():
         info = row["metadata"]
         if not valid_citation({**info, **row}) or not all(map(valid_citation, row["supporting_sources"])):
             raise IndexingError("The snapshot includes an invalid corpus citation.")
-        point_id = str(uuid5(NAMESPACE_URL, f"https://github.com/marvisrego/DarGlobal-CHATBOT#{record_id}"))
+        point_id = corpus_point_id(record_id)
         payloads[point_id] = {
             "record_id": record_id,
             "record_type": row["record_type"],
@@ -66,7 +69,9 @@ def open_collection(args):
         return QdrantClient(path=str(path)), LOCAL_COLLECTION
     values = dotenv_values(ROOT / ".env", interpolate=False)
     settings = {key: (values.get(key) or "").strip() for key in SETTINGS}
-    if args.collection:
+    if args.nvidia:
+        settings["QDRANT_COLLECTION"] = nvidia_api.COLLECTION
+    elif args.collection:
         settings["QDRANT_COLLECTION"] = args.collection
     missing = [key for key, value in settings.items() if not value]
     if missing:
@@ -82,7 +87,7 @@ def open_collection(args):
                         check_compatibility=False), name
 
 
-def ensure_collection(client, name, *, create):
+def ensure_collection(client, name, *, create, dimension=DIMENSION, embedding=EMBEDDING):
     created = False
     if not client.collection_exists(name):
         if not create:
@@ -90,13 +95,13 @@ def ensure_collection(client, name, *, create):
         try:
             created = client.create_collection(
                 collection_name=name,
-                vectors_config=models.VectorParams(size=DIMENSION, distance=models.Distance.COSINE),
-                metadata={"corpus_embedding": EMBEDDING},
+                vectors_config=models.VectorParams(size=dimension, distance=models.Distance.COSINE),
+                metadata={"corpus_embedding": embedding},
             )
         except UnexpectedResponse as error:
             if error.status_code != 409:
                 raise
-    if not compatible_collection(client.get_collection(name).config):
+    if not compatible_collection(client.get_collection(name).config, dimension=dimension, embedding=embedding):
         raise IndexingError("Collection has incompatible vector settings or embedding metadata. "
                             "Choose a separate collection via QDRANT_COLLECTION or --collection.")
     return created
@@ -164,26 +169,42 @@ def main():
     target = parser.add_mutually_exclusive_group()
     target.add_argument("--local", action="store_true", help="Use embedded Qdrant under ignored exports/")
     target.add_argument("--collection", help="Override QDRANT_COLLECTION for this invocation")
+    target.add_argument("--nvidia", action="store_true", help="Use hosted NVIDIA embeddings and the dedicated collection")
     parser.add_argument("--output", type=Path, help="Write the evaluation trace as JSON")
     args = parser.parse_args()
     if args.output and not args.evaluate:
         parser.error("--output requires --evaluate")
     stage = "snapshot validation"
+    resources = ExitStack()
     try:
         payloads = load_payloads()
         print("Validated 25 live passages: 11 DarGlobal projects and 14 sections across seven Wasalt guides.")
-        stage = "local embedding setup"
-        embedder = Embedder()
-        print(f"Embedding model: {MODEL}@{REVISION}, {DIMENSION} dimensions.")
+        stage = "embedding setup"
+        config = {}
+        if args.nvidia:
+            key = (dotenv_values(ROOT / ".env", interpolate=False).get("Nvidia_Embed") or "").strip()
+            if not key:
+                raise IndexingError("Set Nvidia_Embed in local .env.")
+            embedder = resources.enter_context(closing(nvidia_api.NvidiaRetrievalAPI(key, timeout=20.0)))
+            passage_encode = partial(embedder.encode, input_type="passage")
+            config = {"dimension": nvidia_api.DIMENSION, "embedding": nvidia_api.EMBEDDING}
+            print(f"Embedding model: {nvidia_api.EMBED_MODEL}, expected {nvidia_api.DIMENSION} dimensions.")
+        else:
+            embedder = Embedder()
+            passage_encode = embedder.encode
+            print(f"Embedding model: {MODEL}@{REVISION}, {DIMENSION} dimensions.")
+        stage = "passage embedding"
+        vectors = None
+        if args.dry_run or (args.nvidia and not args.evaluate):
+            vectors = passage_encode([payload["text"] for payload in payloads.values()])
+            print(f"Verified {len(vectors)} passage vectors with {len(vectors[0])} dimensions.")
         if args.dry_run:
-            embedder.encode([payload["text"] for payload in payloads.values()])
-            print("Embedded all 25 passages locally.")
             return
         stage = "Qdrant connection"
         client, name = open_collection(args)
         with closing(client):
             stage = "Qdrant collection validation"
-            created = ensure_collection(client, name, create=not args.evaluate)
+            created = ensure_collection(client, name, create=not args.evaluate, **config)
             if args.evaluate:
                 stage = "Qdrant evaluation"
                 verify(client, name, payloads)
@@ -191,7 +212,8 @@ def main():
             else:
                 read_payloads(client, name, payloads)
                 stage = "passage embedding"
-                vectors = embedder.encode([payload["text"] for payload in payloads.values()])
+                if vectors is None:
+                    vectors = passage_encode([payload["text"] for payload in payloads.values()])
                 points = [
                     models.PointStruct(id=point_id, vector=vector, payload=payload)
                     for (point_id, payload), vector in zip(payloads.items(), vectors, strict=True)
@@ -210,6 +232,8 @@ def main():
     except Exception as error:
         # Transport exceptions can contain request URLs, response bodies or headers.
         parser.exit(1, f"{stage} failed ({type(error).__name__}).\n")
+    finally:
+        resources.close()
 
 
 if __name__ == "__main__":

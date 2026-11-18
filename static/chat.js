@@ -143,6 +143,10 @@ function renderConversation({ scroll = false } = {}) {
         }
       }
       if (turn.response.sources.length) reply.append(renderSources(turn.response));
+      if (turn.response.inference_provider && turn.response.inference_model) {
+        const provider = turn.response.inference_provider === "nvidia" ? "NVIDIA" : "OpenRouter";
+        reply.append(element("small", "inference", `${provider} · ${turn.response.inference_model}`));
+      }
     } else if (pending.get(chat.id) === turn) {
       reply.append(element("p", "pending", pendingMessage));
     } else {

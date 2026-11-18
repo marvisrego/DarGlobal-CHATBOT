@@ -38,6 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base_url")
     parser.add_argument("--commit", help="Require this commit SHA or prefix in the health response header")
+    parser.add_argument("--provider", choices=("openrouter", "nvidia"), default="openrouter")
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
     parts = urlsplit(base)
@@ -62,11 +63,15 @@ def main():
             page = context.pages[0]
             navigation = page.goto(base, wait_until="domcontentloaded", timeout=75000)
             assert navigation.status == 200
-            expect(page.get_by_text("OpenRouter: Real corpus", exact=True)).to_be_visible()
+            provider_label = "NVIDIA" if args.provider == "nvidia" else "OpenRouter"
+            expect(page.get_by_text(f"{provider_label}: Real corpus", exact=True)).to_be_visible()
             examples = page.locator("[data-question]").all_inner_texts()
             assert COMPARISON not in examples and GUIDE not in examples
             comparison = ask(page, COMPARISON)
-            assert comparison["answer_path"] == "openrouter" and comparison["inference_model"], comparison["answer_path"]
+            assert comparison["answer_path"] == args.provider and comparison["inference_model"], comparison["answer_path"]
+            if args.provider == "nvidia":
+                assert comparison["inference_provider"] == "nvidia"
+                expect(page.locator(".reply .inference")).to_have_text(f"NVIDIA · {comparison['inference_model']}")
             bullets = [re.fullmatch(r"[-*•]\s+(.+)", line) for line in comparison["answer"].splitlines() if line.strip()]
             assert len(bullets) == 2 and all(bullets), comparison["answer"]
             items = [bullet[1] for bullet in bullets]
