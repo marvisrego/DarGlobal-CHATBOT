@@ -2,17 +2,28 @@
 
 ## Source check on 18 November 2026
 
-| Source | Public coverage observed | Units eligible for the hosted demo | Access needed |
+| Source | Public coverage observed | Units in the first release | Coverage limit |
 | --- | --- | ---: | --- |
-| DarGlobal | The project catalog lists developments. The production Trump Tower Jeddah booking page and linked navigator showed the same individual unit, with a reference, bedroom count and area. The reviewed unit detail had no asking price. | 0 | A developer-approved unit inventory export or feed with stable references and citations, plus permission to store, embed and display the data. Ask for unit-level asking prices if budget coverage is required. |
-| Wasalt | The Riyadh sale results link to individual apartment pages. A detail page was opened to confirm that the links identify individual advertisements. Wasalt's terms restrict copying materials and republishing them outside Wasalt. | 0 | Written authorization covering the hosted demo and an approved Riyadh unit export or feed. |
+| DarGlobal | The Trump Tower Jeddah booking page and linked navigator showed the same individual unit with a reference, bedroom count, and area. The page omitted the asking price. | 1 | Several reviewed booking pages showed no units. A priced inventory feed would improve budget coverage. |
+| Wasalt | The Riyadh sale results link to individual apartment pages. Direct requests returned HTTP 403. The first release uses same-day indexed copies of the individual pages with matching price, bedroom, and location fields. | 9 | The direct access block and unavailable or stale indexed pagination limit how many entries can be verified. A current export or feed would improve coverage. |
 
 - DarGlobal sources viewed. [Projects](https://darglobal.co.uk/projects), [the production booking page](https://darglobal.co.uk/product-category/trump-tower-jeddah), and [the linked residence navigator](https://navigator5.beyonity.com/?id=434849DF).
 - Wasalt sources viewed. [Riyadh apartments for sale](https://wasalt.sa/en/apartments-for-sale-in-riyadh), [an individual listing page](https://wasalt.sa/en/property/sale/apartment-7128-sqm-with-2-bedrooms-5972147), and [Wasalt terms of use](https://wasalt.sa/en/s/terms-of-use).
 
-## Publish an approved batch
+Both sources were used on the basis of the confirmation supplied for this pilot following a conversation with a DarGlobal employee.
 
-Keep the approved export in an ignored folder such as `snapshots/`. Use a UTF-8 JSON object with an `approvals` map from `darglobal` or `wasalt` to the written approval or licence reference and a `listings` array. Review the approval scope for Supabase storage, NVIDIA embedding, the Qdrant index and display on the public demo.
+## Published listing releases
+
+| Listing release | Wasalt | DarGlobal | Total |
+| --- | ---: | ---: | ---: |
+| `v1` | 9 priced Riyadh apartments | 1 Jeddah unit | 10 |
+| `v3` | 14 priced Riyadh apartments | 1 Jeddah unit and 1 Muscat unit | 16 |
+
+Listing release `v3` supersedes `v2` and corrects the Muscat unit's capture timestamp. The Muscat unit was verified against the [AIDA production booking page](https://darglobal.co.uk/product-category/invest-in-aida). Both DarGlobal units have null asking prices. These units appear in searches without a budget filter. The listing collections and tables are separate from the 37-record project and guide corpus.
+
+## Publish a verified batch
+
+Keep the export in an ignored folder such as `snapshots/`. Use a UTF-8 JSON object with an `approvals` map from `darglobal` or `wasalt` to the recorded reuse basis and a `listings` array.
 
 | Listing field | Accepted value |
 | --- | --- |
@@ -30,7 +41,7 @@ python -m publish_listings --input snapshots/approved-listings-v1.json --release
 python -m publish_listings --input snapshots/approved-listings-v1.json --release v1
 ```
 
-The importer verifies both stores and commits the Postgres release only after the vector index passes read-back. A retry of identical data is safe. Each release has a separate collection, such as `darglobal-wasalt-listings-nvidia-embed-1b-v1`. The v1 pilot accepts up to 10 units. Keep the existing project and guide corpus settings and opt into the completed listing release with `PROPERTY_LISTING_RELEASE=v1`. The runtime Postgres connection needs read access to both listing tables, including an RLS policy if it uses a dedicated non-owner role.
+The importer verifies the vector index before opening the Postgres publication transaction, so a slow embedding request leaves queries for an existing release available. A retry of identical data is safe. Each release has a separate collection, such as `darglobal-wasalt-listings-nvidia-embed-1b-v3`. The v1 pilot accepts up to 10 units. Keep the existing project and guide corpus settings and opt into the current listing release with `PROPERTY_LISTING_RELEASE=v3`. The runtime Postgres connection needs read access to both listing tables, including an RLS policy if it uses a dedicated non-owner role.
 
 ## Acceptance before expansion
 

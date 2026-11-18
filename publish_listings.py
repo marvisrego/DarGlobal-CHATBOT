@@ -35,7 +35,7 @@ def load_release(path, release):
     if not isinstance(raw, list) or not 1 <= len(raw) <= limit:
         raise ValueError(f"{release} requires between 1 and {limit} verified unit listings.")
     if not isinstance(approvals, dict):
-        raise ValueError("Provide a written approval or licence reference per source.")
+        raise ValueError("Record the reuse basis for each source.")
     listings = {}
     units = set()
     for position, item in enumerate(raw, start=1):
@@ -45,7 +45,7 @@ def load_release(path, release):
             raise ValueError(f"Invalid unit at row {position}. {error}") from None
         approval = approvals.get(listing.source)
         if not isinstance(approval, str) or not approval.strip():
-            raise ValueError(f"Missing written approval or licence reference for {listing.source}.")
+            raise ValueError(f"Missing reuse basis for {listing.source}.")
         unit = listing.unit_key.casefold() if listing.unit_key else None
         if listing.listing_id in listings or (unit is not None and unit in units):
             raise ValueError(f"Duplicate unit at row {position}.")
@@ -141,17 +141,18 @@ def main():
         missing = [name for name, value in settings.items() if not value]
         if missing:
             raise ValueError(f"Set {', '.join(missing)} in the environment.")
-        stage = "Postgres staging and Qdrant publication"
+        stage = "Qdrant publication"
         with (
-            connect(**database_settings(settings["DATABASE_URL"]), row_factory=dict_row) as connection,
             closing(QdrantClient(
                 url=qdrant_endpoint(settings["QDRANT_URL"]), api_key=settings["QDRANT_API_KEY"],
                 timeout=20, check_compatibility=False,
             )) as client,
             closing(NvidiaRetrievalAPI(settings["Nvidia_Embed"], timeout=10)) as embedder,
         ):
-            stage_release(connection, args.release, digest, listings)
             index_listings(client, embedder, args.release, digest, listings)
+        stage = "Postgres publication"
+        with connect(**database_settings(settings["DATABASE_URL"]), row_factory=dict_row) as connection:
+            stage_release(connection, args.release, digest, listings)
         print(f"Verified {len(listings)} listings in Postgres and {collection_name(args.release)}.", flush=True)
     except ValueError as error:
         if stage == "validation":
