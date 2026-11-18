@@ -2,6 +2,8 @@
 
 See the [Qdrant evaluation](qdrant.md) for the vector search comparison on the
 same 15 questions and six additional paraphrases and misspellings.
+See the [hybrid chatbot evaluation](hybrid.md) for the opt-in configuration,
+fallback checks, live smoke tests, and embedding benchmark.
 
 ## Coverage
 

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "neptune-typo",
+    "question": "What city is the Neptne development in?",
+    "expected": ["project:neptune"],
+    "facts": ["Riyadh, Saudi Arabia"]
+  },
+  {
+    "id": "home-cost-paraphrase",
+    "question": "Do service fees continue after I buy my first home?",
+    "expected": ["guide:buyer-cost"],
+    "facts": ["maintenance", "building service charges"]
+  },
+  {
+    "id": "developer-risk-paraphrase",
+    "question": "How can I see if the builder has a good history before I buy a home that has yet to be built?",
+    "expected": ["guide:offplan-risk"],
+    "facts": ["track record"]
+  },
+  {
+    "id": "unknown-project",
+    "question": "Where is the DarGlobal Ocean Crown project?",
+    "expected": [],
+    "facts": ["No matching DarGlobal project"]
+  },
+  {
+    "id": "listing-in-dubai",
+    "question": "Show 2-bedroom Wasalt apartments below AED 900,000 in Dubai.",
+    "expected": [],
+    "facts": ["No Wasalt listings"]
+  },
+  {
+    "id": "conflicting-location",
+    "question": "Where is the DarGlobal Tiera Viva development in Oman?",
+    "expected": [],
+    "facts": ["No matching DarGlobal project"]
+  },
+  {
+    "id": "conflicting-property-type",
+    "question": "Show me DarGlobal Tiera Viva apartments in Spain.",
+    "expected": [],
+    "facts": ["No matching DarGlobal project"]
+  },
+  {
+    "id": "unrelated",
+    "question": "What are today's football scores?",
+    "expected": [],
+    "facts": ["no evidence"]
+  },
+  {
+    "id": "mulliner-typo",
+    "question": "Where was the Mullner project completed?",
+    "expected": ["project:mulliner"],
+    "facts": ["London, UK", "Completed"]
+  },
+  {
+    "id": "offplan-paraphrase",
+    "question": "Is it normal to split the purchase into payments while the building is going up?",
+    "expected": ["guide:offplan-payment"],
+    "facts": ["staged payments", "during construction"]
+  },
+  {
+    "id": "spain-villas",
+    "question": "Which DarGlobal villas are in Spain?",
+    "expected": ["project:tierra-viva"],
+    "facts": ["Spain", "Villas"]
+  },
+  {
+    "id": "unknown-project-with-location",
+    "question": "Where is the Dar Global Silver Dunes project in Oman?",
+    "expected": [],
+    "facts": ["No matching DarGlobal project"]
+  },
+  {
+    "id": "construction-typo",
+    "question": "Is Les Vauges still under construction?",
+    "expected": ["project:les-vagues"],
+    "facts": ["Under construction", "2026-06-30"]
+  },
+  {
+    "id": "broad-guide-alias",
+    "question": "When buying off-plan, can I split what I owe into separate amounts while the building goes up?",
+    "expected": ["guide:offplan-payment"],
+    "facts": ["staged payments", "during construction"]
+  }
+]

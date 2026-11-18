@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+from statistics import median, quantiles
+from time import perf_counter
 
 from fastapi.testclient import TestClient
 
@@ -17,22 +19,71 @@ LIVE_GUIDE_CASE = {
     "facts": ["staged payments", "developer's track record"],
     "support": [],
 }
+RECOVERY_FACTS = {
+    "tierra-typo": ["Benahavís, Spain", "Villas"],
+    "paperwork-paraphrase": ["title deed", "building permit", "completion certificate"],
+    "commute-paraphrase": ["commute", "before signing a lease"],
+    "remote-paraphrase": ["maintenance", "cleaning"],
+    "astera-typo": ["Ras Al Khaimah, UAE", "Beachfront residences"],
+    "les-vagues-typo": ["Lusail, Qatar", "Apartments and retail units"],
+}
 
 
 def citation_key(source):
     return source["publisher"], source["title"], source["url"]
 
 
+def benchmark_embeddings():
+    from property_vectors import Embedder
+
+    cases = json.loads((ROOT / "evaluation/qdrant-queries.json").read_text(encoding="utf-8"))
+    start = perf_counter()
+    embedder = Embedder(local_files_only=True)
+    ready = perf_counter()
+    embedder.encode([cases[0]["question"]])
+    first = perf_counter()
+    print(f"Cached model initialization {(ready - start) * 1000:.1f} ms")
+    print(f"First query embedding {(first - ready) * 1000:.2f} ms")
+    for label, questions in (
+        ("Ordinary", [case["question"] for case in cases]),
+        ("Long", [("Which records describe property ownership, location, and availability? " * 30).strip()]),
+    ):
+        elapsed = []
+        for question in questions * (60 // len(questions)):
+            start = perf_counter()
+            embedder.encode([question])
+            elapsed.append((perf_counter() - start) * 1000)
+        p95 = quantiles(elapsed, n=100)[94]
+        print(f"{label} query embedding ({len(elapsed)} runs), p50 {median(elapsed):.2f} ms, p95 {p95:.2f} ms")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--openrouter", action="store_true", help="Run only the two live model checks")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--openrouter", action="store_true", help="Run only the two live model checks")
+    group.add_argument("--benchmark", action="store_true", help="Measure local query encoding only")
+    parser.add_argument("--hybrid", action="store_true", help="Use Qdrant and include the hybrid regression cases")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    os.environ.update(CHAT_MODE="live" if args.openrouter else "mock", PROPERTY_DATA_MODE="live")
-    from main import app
+    if args.benchmark:
+        benchmark_embeddings()
+        return 0
+    os.environ.update(
+        CHAT_MODE="live" if args.openrouter else "mock", PROPERTY_DATA_MODE="live",
+        PROPERTY_RETRIEVAL_MODE="hybrid" if args.hybrid else "jsonl",
+    )
+    from main import app, vector_lookup
 
     questions = json.loads((ROOT / "evaluation/questions.json").read_text(encoding="utf-8"))
-    if args.openrouter:
+    if args.hybrid:
+        additional = json.loads((ROOT / "evaluation/qdrant-queries.json").read_text(encoding="utf-8"))
+        additional = [{**item, "facts": RECOVERY_FACTS[item["id"]]} for item in additional]
+        if args.openrouter:
+            questions = [item for item in additional if item["id"] in {"tierra-typo", "paperwork-paraphrase"}]
+        else:
+            new = json.loads((ROOT / "evaluation/hybrid-queries.json").read_text(encoding="utf-8"))
+            questions += additional + new
+    elif args.openrouter:
         questions = [next(item for item in questions if item["id"] == "compare"), LIVE_GUIDE_CASE]
     records = {
         row["record_id"]: row
@@ -42,7 +93,7 @@ def main():
     results = []
     with TestClient(app) as client:
         for item in questions:
-            retrieved = search(item["question"], live_data=True)
+            retrieved = search(item["question"], live_data=True, vector_lookup=vector_lookup)
             top_five = retrieved.passage_ids
             expected = set(item["expected"])
             retrieval_pass = expected.issubset(top_five) if expected else not top_five
@@ -55,7 +106,7 @@ def main():
             }
             for key in expected:
                 for source in records.get(key, {}).get("supporting_sources", []):
-                    if source["publisher"] in item["support"]:
+                    if source["publisher"] in item.get("support", []):
                         expected_citations.add((source["publisher"], source["title"], source["canonical_url"]))
             actual_sources = payload.get("sources", [])
             citation_pass = (

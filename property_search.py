@@ -25,6 +25,18 @@ BUDGET = re.compile(
 )
 BEDROOMS = re.compile(r"\b(\d+)\s*[- ]?\s*(?:bedrooms?|beds?|br|bhk)\b")
 NUMBER_WORDS = {"studio": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+PROPERTY_TYPES = {
+    "apartment", "villa", "mansion", "penthouse", "plot", "residence", "house", "townhouse", "studio",
+}
+PROJECT_NAME_WORDS = {"interiors", "tower", "development", "project", "residences"}
+PROJECT_SCORE_FLOOR = 0.22
+GUIDE_SCORE_FLOOR = 0.28
+SINGLE_PROJECT_LOCATION = re.compile(r"\b(?:where (?:is|was)|(?:what|which) (?:city|country))\b")
+GUIDE_TOPICS = re.compile(
+    r"\b(?:buy\w*|own\w*|sell\w*|rent\w*|lease\w*|tenan\w*|home\w*|hous\w*|propert\w*|"
+    r"apartments?|condo\w*|build\w*|mainten\w*|repairs?|neighbou?r\w*|districts?|ejar|park|"
+    r"commut\w*|off plan|developer\w*)\b"
+)
 NO_MATCH = "No sample records match that request."
 HELP = (
     "Ask about a project by name, such as Sample Harbour Residences, or search Wasalt "
@@ -115,7 +127,68 @@ def record_fact(record):
     return "\n".join(filter(None, fields))
 
 
-def corpus_search(message, records):
+def property_types(terms):
+    return {term.removesuffix("s") for term in terms} & PROPERTY_TYPES
+
+
+def matches_project_filters(record, locations, types, complete, constructing):
+    location = normalized(record.get("location") or "")
+    recorded_types = property_types(normalized(record.get("property_type") or "").split())
+    return (
+        (not locations or any(includes(location, place) for place in locations))
+        and (not types or bool(types & recorded_types))
+        and (not complete or record.get("status") == "Completed")
+        and (not constructing or record.get("status") == "Under construction")
+    )
+
+
+def one_typo(left, right):
+    if len(left) > len(right):
+        left, right = right, left
+    if len(right) - len(left) > 1:
+        return False
+    first = next((index for index, pair in enumerate(zip(left, right)) if pair[0] != pair[1]), len(left))
+    if len(left) < len(right):
+        return left[first:] == right[first + 1:]
+    return first < len(left) and (
+        left[first + 1:] == right[first + 1:]
+        or (left[first:first + 2] == right[first:first + 2][::-1] and left[first + 2:] == right[first + 2:])
+    )
+
+
+def project_name_evidence(query, record):
+    words = query.split()
+    for phrase in (record["title"], *record.get("aliases", [])):
+        alias = normalized(phrase).split()
+        if not alias or len("".join(alias)) < 4 or not any(word.isalpha() for word in alias):
+            continue
+        for index in range(len(words) - len(alias) + 1):
+            window = words[index:index + len(alias)]
+            if not (set(window) - PROJECT_NAME_WORDS):
+                continue
+            if one_typo(" ".join(window), " ".join(alias)):
+                return True
+    return False
+
+
+def recover_corpus_match(message, query, records, vector_lookup, *, guides, project_ids):
+    if not guides and not project_ids:
+        return None
+    semantic_query = message
+    if guides and any(includes(query, term) for term in ("rush hour", "peak traffic", "trial drive")):
+        semantic_query += " test the commute to work before signing a lease"
+    hits = vector_lookup(semantic_query)
+    by_id = {row["record_id"]: row for row in records if row.get("record_id")}
+    for key, score in hits:
+        if key in project_ids and score >= PROJECT_SCORE_FLOOR:
+            return by_id[key]
+    for key, score in hits:
+        if guides and score >= GUIDE_SCORE_FLOOR and by_id.get(key, {}).get("record_type") == "buyer_guide":
+            return by_id[key]
+    return None
+
+
+def corpus_search(message, records, *, vector_lookup=None):
     query = normalized(message)
     projects = [row for row in records if row["record_type"] == "project"]
     terms = set(query.split())
@@ -125,7 +198,7 @@ def corpus_search(message, records):
         )
     ]
     wants_wasalt = includes(query, "wasalt")
-    project_intent = bool(named) or "darglobal" in terms or (
+    project_intent = bool(named) or "darglobal" in terms or includes(query, "dar global") or (
         not wants_wasalt and bool(terms & {"project", "projects", "development", "developments"})
     )
     listing_intent = wants_wasalt and (
@@ -140,13 +213,13 @@ def corpus_search(message, records):
     locations = {place for place in locale if includes(query, place)}
     complete = bool(terms & {"completed", "complete", "finished", "delivered"})
     constructing = includes(query, "under construction")
+    types = property_types(terms)
     matched_projects = named
-    if not named and project_intent and locations:
-        matched_projects = [
-            row for row in projects if any(includes(normalized(row.get("location") or ""), place) for place in locations)
-            and (not complete or row.get("status") == "Completed")
-            and (not constructing or row.get("status") == "Under construction")
-        ]
+    possible_names = [
+        row for row in projects if project_name_evidence(query, row)
+    ] if not named and (vector_lookup is not None or (project_intent and locations)) else []
+    if not named and not possible_names and project_intent and locations and not SINGLE_PROJECT_LOCATION.search(query):
+        matched_projects = [row for row in projects if matches_project_filters(row, locations, types, complete, constructing)]
     guide_candidates = []
     if not listing_intent:
         for row in records:
@@ -171,6 +244,30 @@ def corpus_search(message, records):
         ]
         if not matched_listings:
             notes.append("No Wasalt listings in the real property snapshot match those filters.")
+    specific_guide = bool(guide_candidates and guide_candidates[0][0] > 1)
+    if vector_lookup is not None and not specific_guide and not listing_intent and (
+        not matched_projects or wants_wasalt
+    ) and not (
+        BUDGET.search(message) or BEDROOMS.search(query)
+        or terms & {"listings", "listing", "bedrooms", "bedroom", "bhk", "studio"}
+    ):
+        project_ids = {
+            row["record_id"] for row in possible_names if row.get("record_id")
+            and matches_project_filters(row, locations, types, complete, constructing)
+        } if not matched_projects and not wants_wasalt else set()
+        implicit_listing = types and not project_intent and bool(
+            terms & {"find", "show", "list", "available", "availability"}
+        )
+        guide_intent = wants_wasalt or (
+            not project_intent and not possible_names and not implicit_listing and bool(GUIDE_TOPICS.search(query))
+        )
+        recovered = recover_corpus_match(
+            message, query, records, vector_lookup, guides=guide_intent, project_ids=project_ids
+        )
+        if recovered and recovered["record_type"] == "project":
+            matched_projects = [recovered]
+        elif recovered:
+            guide_candidates = [(1, recovered["record_id"], recovered)]
     if project_intent and not matched_projects:
         notes.append("No matching DarGlobal project is in the real property snapshot.")
     if matched_projects:
@@ -217,7 +314,7 @@ def corpus_search(message, records):
     )
 
 
-def search(message, snapshot=None, *, live_data=False):
+def search(message, snapshot=None, *, live_data=False, vector_lookup=None):
     snapshot = (LIVE_SNAPSHOT if live_data else SNAPSHOT) if snapshot is None else snapshot
     description = "real property" if live_data else "sample property"
     if not snapshot.is_file():
@@ -232,7 +329,7 @@ def search(message, snapshot=None, *, live_data=False):
             if valid_citation(record)
         ]
         if any(record.get("record_id") for record in selected):
-            return corpus_search(message, selected)
+            return corpus_search(message, selected, vector_lookup=vector_lookup)
     projects = [record for record in selected if (record["source"], record["record_type"]) == ("DarGlobal", "project")]
     listings = [record for record in selected if (record["source"], record["record_type"]) == ("Wasalt", "listing")]
     query = normalized(message)

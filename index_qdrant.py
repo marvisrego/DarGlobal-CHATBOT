@@ -6,29 +6,17 @@ from contextlib import closing
 import json
 from pathlib import Path
 import re
-from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, uuid5
 
 from dotenv import dotenv_values
-from huggingface_hub import hf_hub_download
-import numpy as np
-from onnxruntime import InferenceSession
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
-from tokenizers import Tokenizer
 
 from corpus_snapshot import ROOT, SNAPSHOT, load_snapshot
 from property_search import search, valid_citation
+from property_vectors import DIMENSION, EMBEDDING, MODEL, REVISION, Embedder, compatible_collection, qdrant_endpoint
 
 
-MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
-DIMENSION = 384
-EMBEDDING = {
-    "model": MODEL,
-    "revision": REVISION,
-    "pipeline": "onnx/model.onnx; mean pooling; L2 normalization; 256 tokens",
-}
 LOCAL_COLLECTION = "darglobal-wasalt-minilm-v1"
 EVALUATION = ROOT / "evaluation"
 SETTINGS = ("QDRANT_URL", "QDRANT_API_KEY", "QDRANT_COLLECTION")
@@ -36,30 +24,6 @@ SETTINGS = ("QDRANT_URL", "QDRANT_API_KEY", "QDRANT_COLLECTION")
 
 class IndexingError(Exception):
     """An operational error whose message is safe to print."""
-
-
-class Embedder:
-    def __init__(self):
-        tokenizer_path = hf_hub_download(MODEL, "tokenizer.json", revision=REVISION, token=False)
-        model_path = hf_hub_download(MODEL, "onnx/model.onnx", revision=REVISION, token=False)
-        self.tokenizer = Tokenizer.from_file(tokenizer_path)
-        self.tokenizer.enable_truncation(max_length=256)
-        self.tokenizer.enable_padding()
-        self.session = InferenceSession(model_path, providers=["CPUExecutionProvider"])
-
-    def encode(self, texts):
-        tokens = self.tokenizer.encode_batch(texts)
-        mask = np.asarray([item.attention_mask for item in tokens], dtype=np.int64)
-        hidden, = self.session.run(None, {
-            "input_ids": np.asarray([item.ids for item in tokens], dtype=np.int64),
-            "attention_mask": mask,
-            "token_type_ids": np.asarray([item.type_ids for item in tokens], dtype=np.int64),
-        })
-        pooled = (hidden * mask[..., None]).sum(axis=1) / mask.sum(axis=1, keepdims=True)
-        norms = np.linalg.norm(pooled, axis=1, keepdims=True)
-        if pooled.shape != (len(texts), DIMENSION) or not np.isfinite(pooled).all() or np.any(norms == 0):
-            raise IndexingError("The embedding model returned invalid vectors.")
-        return (pooled / norms).astype(np.float32).tolist()
 
 
 def load_payloads():
@@ -110,10 +74,11 @@ def open_collection(args):
     name = settings["QDRANT_COLLECTION"]
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,255}", name) or name in {".", ".."}:
         raise IndexingError("Use a valid Qdrant collection name in QDRANT_COLLECTION or --collection.")
-    url = urlsplit(settings["QDRANT_URL"])
-    if url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment:
-        raise IndexingError("Set QDRANT_URL in local .env to an HTTPS endpoint without embedded credentials.")
-    return QdrantClient(url=url.geturl(), api_key=settings["QDRANT_API_KEY"], timeout=20,
+    try:
+        url = qdrant_endpoint(settings["QDRANT_URL"])
+    except ValueError as error:
+        raise IndexingError("Set QDRANT_URL in local .env to a valid HTTPS endpoint.") from error
+    return QdrantClient(url=url, api_key=settings["QDRANT_API_KEY"], timeout=20,
                         check_compatibility=False), name
 
 
@@ -131,16 +96,7 @@ def ensure_collection(client, name, *, create):
         except UnexpectedResponse as error:
             if error.status_code != 409:
                 raise
-    config = client.get_collection(name).config
-    vectors = config.params.vectors
-    if (
-        not isinstance(vectors, models.VectorParams)
-        or vectors.size != DIMENSION
-        or vectors.distance != models.Distance.COSINE
-        or vectors.datatype not in {None, models.Datatype.FLOAT32}
-        or vectors.multivector_config is not None
-        or (config.metadata or {}).get("corpus_embedding") != EMBEDDING
-    ):
+    if not compatible_collection(client.get_collection(name).config):
         raise IndexingError("Collection has incompatible vector settings or embedding metadata. "
                             "Choose a separate collection via QDRANT_COLLECTION or --collection.")
     return created
