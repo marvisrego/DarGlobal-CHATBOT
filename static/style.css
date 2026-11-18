@@ -64,6 +64,13 @@ h1 { margin: 0; max-width: 21ch; font-family: "Instrument Serif", Georgia, serif
 .sources li { border: 1px solid var(--line); padding: 12px; border-radius: 7px; background: var(--surface); overflow-wrap: anywhere; }
 .sources small { display: block; color: var(--stone); font-size: 11px; margin: 0 0 5px; }
 .sources strong, .sources a { font-size: 13px; font-weight: 600; color: var(--parchment); }
+.listing-cards { list-style: none; display: grid; gap: 10px; margin: 12px 0 0; padding: 0; }
+.listing-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.listing-card h3 { margin: 0 0 7px; color: var(--brass); font-size: 15px; }
+.listing-card p { margin: 0 0 4px; font-size: 14px; }
+.listing-card .sources { margin-top: 9px; }
+.listing-card .sources li { padding: 0; border: 0; }
+.reply .listing-followup { margin-top: 12px; }
 .retry { background: transparent; border: 1px solid #8c734f; border-radius: 6px; padding: 8px 13px; color: var(--brass); }
 
 .composer-area { width: min(var(--column), 100% - 48px); margin: 0 auto; padding: 8px 0 max(12px, env(safe-area-inset-bottom)); }

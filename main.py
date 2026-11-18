@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from answers import ChatReply
 from corpus_snapshot import RELEASES, CorpusUnavailable, live_snapshot
-from listing_pilot import CHEAPEST_FOLLOWUP, listing_intent
+from listing_pilot import CHEAPEST_FOLLOWUP, ListingFilters, listing_intent
 import nvidia_api
 from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
 from property_search import normalized, search
@@ -109,6 +109,14 @@ if LISTING_RELEASE:
         shared_collection=QDRANT_COLLECTION if SHARED_RELEASES else None,
     )
 
+property_assistant = None
+if listing_search is not None and CHAT_MODE == "live" and CHAT_PROVIDER == "nvidia":
+    from conversational import PropertyAssistant
+
+    property_assistant = PropertyAssistant(
+        required_setting("Nvidia_chat"), listing_search, postgres_corpus, vector_lookup, nvidia_retrieval.rerank,
+    )
+
 
 @asynccontextmanager
 async def lifespan(_app):
@@ -144,6 +152,8 @@ class ChatRequest(BaseModel):
     listing_ids: Annotated[list[Annotated[str, StringConstraints(
         pattern=r"^(?:wasalt|darglobal):[a-z0-9][a-z0-9_.:-]{0,119}$",
     )]], Field(max_length=5)] | None = None
+    listing_context: ListingFilters | None = None
+    previous_question: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
 
 
 @app.get("/", include_in_schema=False)
@@ -165,7 +175,8 @@ async def home():
             html = html.replace("Ask about a project or buyer guide", "Ask about a listing, project, or buyer guide")
             html = html.replace("Across sources", "Listing search").replace(
                 "Summarize AIDA and add Wasalt's guidance on off-plan risk.",
-                "Find 3-bedroom apartments for sale in Riyadh between SAR 500,000 and SAR 600,000.",
+                "What properties can I buy?" if property_assistant is not None
+                else "Find 3-bedroom apartments for sale in Riyadh between SAR 500,000 and SAR 600,000.",
             )
     else:
         html = html.replace("Research DarGlobal projects and Wasalt buyer guides. Project status is dated to the source.",
@@ -189,6 +200,22 @@ async def chat(
     request_id = uuid4().hex
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
+    if property_assistant is not None:
+        turn = await property_assistant.run(request, request_id)
+        result = turn.result
+        context = result.listing_context
+        if context or result.listing_cards:
+            response.headers["X-Listing-Release"] = LISTING_RELEASE
+        return ChatReply(
+            answer=turn.answer, sources=[*result.sources, *result.supporting_sources],
+            mode=CHAT_MODE, request_id=request_id, answer_path=turn.path,
+            retrieval_path=result.retrieval_path.replace("jsonl", "postgres"),
+            inference_model=turn.model, inference_provider="nvidia" if turn.model else None,
+            listing_ids=result.passage_ids if result.listing_cards else None,
+            listing_context=context.model_dump(mode="json", exclude_none=True) if context else None,
+            listing_cards=result.listing_cards or None, listing_intro=result.message if result.listing_cards else None,
+            listing_followup=result.listing_followup,
+        )
     followup = bool(request.listing_ids and CHEAPEST_FOLLOWUP.fullmatch(normalized(request.message)))
     is_listing = listing_search is not None and (followup or listing_intent(request.message))
     try:
@@ -248,4 +275,6 @@ async def chat(
         inference_model=inference_model,
         inference_provider=inference_provider,
         listing_ids=result.passage_ids if is_listing else None,
+        listing_cards=result.listing_cards or None,
+        listing_intro=result.message if result.listing_cards else None,
     )

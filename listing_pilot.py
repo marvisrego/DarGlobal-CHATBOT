@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
-from answers import Source
+from answers import ListingCard, Source
 from property_search import BUDGET, BEDROOMS, CURRENCIES, SearchResult, includes, listing_filters, normalized, property_types
 
 
@@ -45,6 +45,29 @@ SourceKey = Literal["darglobal", "wasalt"]
 Label = Annotated[str, StringConstraints(min_length=1, max_length=100)]
 Key = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$")]
 Amount = Annotated[Decimal, Field(gt=0, max_digits=20, decimal_places=4)]
+BudgetAmount = Annotated[Decimal, Field(ge=0, max_digits=20, decimal_places=4)]
+PropertyType = Literal["apartment", "villa", "mansion", "penthouse", "plot", "residence", "house", "townhouse", "studio"]
+
+
+class ListingFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    city: Label | None = Field(default=None, description="City name. Omit for a search across all cities.")
+    publisher: SourceKey | None = None
+    transaction_type: Literal["sale", "rent"] | None = None
+    property_types: Annotated[list[PropertyType], Field(max_length=5)] | None = None
+    bedrooms: Annotated[int, Field(strict=True, ge=0, le=100)] | None = None
+    currency: Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")] | None = None
+    minimum_price: BudgetAmount | None = None
+    maximum_price: BudgetAmount | None = None
+    strict_maximum: bool | None = Field(default=None, description="True for under/below, false for up to.")
+    rent_period: Literal["month", "year"] | None = None
+    preference: Annotated[str, StringConstraints(min_length=1, max_length=250)] | None = None
+
+
+class ListingToolArgs(ListingFilters):
+    refine_previous: bool = Field(default=False, description="Apply these changes to the last successful listing search.")
+    cheapest_previous: bool = Field(default=False, description="Compare the prices of the last displayed listings.")
 
 
 def collection_name(release):
@@ -114,7 +137,7 @@ class Listing(BaseModel):
 
 @dataclass(frozen=True)
 class ListingQuery:
-    city: str
+    city: str | None
     bedrooms: int | None = None
     currency: str | None = None
     budget: Decimal | None = None
@@ -142,11 +165,11 @@ def listing_intent(message):
                 or re.search(r"\blistings?\b", query))
 
 
-def parse_listing_query(message, cities):
+def parse_listing_query(message, cities, *, require_city=True):
     query = normalized(message)
     matches = sorted((city for city in cities if includes(query, city)), key=len, reverse=True)
     matches = [city for index, city in enumerate(matches) if not any(includes(other, city) for other in matches[:index])]
-    if len(matches) != 1:
+    if len(matches) > 1 or (require_city and not matches):
         raise ValueError("Include one city covered by the listing pilot.")
     terms = set(query.split())
     price_query = BUDGET_ALIAS.sub("up to", message)
@@ -182,7 +205,7 @@ def parse_listing_query(message, cities):
     description = normalized(description)
     preference = PREFERENCE.search(description)
     return ListingQuery(
-        city=matches[0], bedrooms=bedrooms, currency=currency, budget=budget, minimum_price=minimum_price,
+        city=matches[0] if matches else None, bedrooms=bedrooms, currency=currency, budget=budget, minimum_price=minimum_price,
         strict=strict, source=source,
         transaction_type="rent" if rent else "sale" if sale else None, types=tuple(sorted(property_types(terms))),
         rent_period=("month" if monthly else "year") if rent and monthly != yearly else None,
@@ -210,6 +233,8 @@ def listing_result(rows, retrieval_path, *, has_preference=False):
                 unknowns.append("rent period unpublished")
             context = f" ({', '.join(unknowns)})" if unknowns else ""
             fields.append(f"Asking price observed at capture: {currency}{amount}{period}{context}")
+        else:
+            fields.append("The captured listing gives no asking price.")
         if row.bedrooms is not None:
             fields.append(f"{row.bedrooms} bedrooms")
         if row.area_sqm is not None:
@@ -225,5 +250,7 @@ def listing_result(rows, retrieval_path, *, has_preference=False):
                    "The requested preference remains unverified. Check the published features below.")
     if retrieval_path == "postgres_after_qdrant_failure":
         message += " Preference ranking was temporarily unavailable."
+    cards = [ListingCard(title=source.title, lines=fact.splitlines()[1:], source=source)
+             for fact, source in zip(facts, sources, strict=True)]
     return SearchResult(message, facts=facts, sources=sources, passage_ids=[row.listing_id for row in rows],
-                        rankable=False, retrieval_path=retrieval_path)
+                        rankable=False, retrieval_path=retrieval_path, listing_cards=cards)

@@ -107,7 +107,7 @@ class ListingPilotTests(unittest.TestCase):
         self.assertEqual(row.captured_at.isoformat(), "2025-02-03T09:00:00+00:00")
         reply = listing_result([row], "postgres")
         self.assertEqual(reply.sources[0].url, row.source_url)
-        self.assertNotIn("asking price", reply.facts[0].casefold())
+        self.assertIn("gives no asking price", reply.facts[0].casefold())
 
     def test_routes_listing_prompts_and_preserves_corpus_questions(self):
         import main

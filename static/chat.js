@@ -17,7 +17,7 @@ const storageKey = "darglobal-property-chat-v1";
 const pending = new Map();
 const live = document.body.dataset.mode === "live";
 const pendingMessage = live
-  ? "Waiting for the model."
+  ? "Checking your request."
   : document.body.dataset.dataMode === "live"
     ? "Looking through the property snapshot."
     : "Looking through the sample records.";
@@ -118,6 +118,19 @@ function renderSources(data) {
   return list;
 }
 
+function renderListingCards(cards) {
+  const list = element("ul", "listing-cards");
+  list.setAttribute("aria-label", "Verified listings");
+  for (const card of cards) {
+    const item = element("li", "listing-card");
+    item.append(element("h3", "", card.title));
+    for (const line of card.lines) item.append(element("p", "", line));
+    item.append(renderSources({ sources: [card.source] }));
+    list.append(item);
+  }
+  return list;
+}
+
 function renderConversation({ scroll = false, reveal = null } = {}) {
   const chat = activeChat();
   byId("welcome").hidden = Boolean(chat);
@@ -134,7 +147,9 @@ function renderConversation({ scroll = false, reveal = null } = {}) {
     if (turn === reveal) revealedReply = reply;
     reply.append(element("h2", "", "Research assistant"));
     if (turn.response) {
-      for (const paragraph of turn.response.answer.split(/\n\s*\n/)) {
+      const cards = turn.response.listing_cards;
+      const text = cards?.length ? turn.response.listing_intro : turn.response.answer;
+      for (const paragraph of text.split(/\n\s*\n/)) {
         const bullets = paragraph.trim().split("\n").map((line) => line.match(/^[-*•]\s+(.+)$/));
         if (bullets.every(Boolean)) {
           const list = element("ul", "answer-list");
@@ -144,7 +159,9 @@ function renderConversation({ scroll = false, reveal = null } = {}) {
           reply.append(element("p", "", paragraph));
         }
       }
-      if (turn.response.sources.length) reply.append(renderSources(turn.response));
+      if (cards?.length) reply.append(renderListingCards(cards));
+      else if (turn.response.sources.length) reply.append(renderSources(turn.response));
+      if (turn.response.listing_followup) reply.append(element("p", "listing-followup", turn.response.listing_followup));
       if (turn.response.inference_provider && turn.response.inference_model) {
         const provider = turn.response.inference_provider === "nvidia" ? "NVIDIA" : "OpenRouter";
         reply.append(element("small", "inference", `${provider} · ${turn.response.inference_model}`));
@@ -195,8 +212,11 @@ async function requestAnswer(chat, turn) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: turn.message, listing_ids: turn.listingIds || undefined }),
-      signal: AbortSignal.timeout(live ? 45000 : 15000),
+      body: JSON.stringify({
+        message: turn.message, listing_ids: turn.listingIds || undefined,
+        listing_context: turn.listingContext || undefined, previous_question: turn.previousQuestion,
+      }),
+      signal: AbortSignal.timeout(live ? 85000 : 15000),
     });
     if (!response.ok) throw new Error("Chat request failed");
     turn.response = await response.json();
@@ -224,7 +244,12 @@ form.addEventListener("submit", (event) => {
     state.activeId = chat.id;
   }
   state.chats = [chat, ...state.chats.filter((item) => item !== chat)];
-  const turn = { message, response: null, listingIds: chat.turns.at(-1)?.response?.listing_ids };
+  const previous = chat.turns.at(-1);
+  const turn = {
+    message, response: null, previousQuestion: previous?.message,
+    listingIds: previous?.response?.listing_ids,
+    listingContext: previous?.response?.listing_context,
+  };
   chat.turns.push(turn);
   input.value = "";
   input.focus();
