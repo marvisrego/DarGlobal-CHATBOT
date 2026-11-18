@@ -13,12 +13,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StringConstraints
 from starlette.concurrency import run_in_threadpool
 
-from answers import ChatReply
-from corpus_snapshot import RELEASES, CorpusUnavailable, live_snapshot
-from listing_pilot import CHEAPEST_FOLLOWUP, ListingFilters, listing_intent
-import nvidia_api
-from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
-from property_search import normalized, search
+from app.chat.answers import ChatReply
+from app.data.corpus_snapshot import RELEASES, CorpusUnavailable, live_snapshot
+from app.data.listing_pilot import CHEAPEST_FOLLOWUP, ListingFilters, listing_intent
+from app.chat import nvidia_api
+from app.chat.openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
+from app.search.property_search import normalized, search
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -67,14 +67,14 @@ def required_setting(name):
 
 postgres_corpus = None
 if CORPUS_BACKEND == "postgres":
-    from corpus_postgres import PostgresCorpus
+    from app.data.corpus_postgres import PostgresCorpus
 
     postgres_corpus = PostgresCorpus(required_setting("DATABASE_URL"), corpus_file)
 
 vector_lookup = None
 nvidia_retrieval = None
 if RETRIEVAL_MODE in {"hybrid", "nvidia"} and DATA_MODE == "live":
-    from hybrid_retrieval import HybridLookup
+    from app.search.hybrid_retrieval import HybridLookup
 
     structured_backend = "Postgres" if postgres_corpus is not None else "JSONL"
     if RETRIEVAL_MODE == "nvidia":
@@ -102,7 +102,7 @@ listing_search = None
 if LISTING_RELEASE:
     if postgres_corpus is None or nvidia_retrieval is None:
         raise RuntimeError("PROPERTY_LISTING_RELEASE requires live data, Postgres and NVIDIA retrieval.")
-    from listing_store import PostgresListings
+    from app.data.listing_store import PostgresListings
 
     listing_search = PostgresListings(
         required_setting("DATABASE_URL"), LISTING_RELEASE, nvidia_retrieval,
@@ -111,7 +111,7 @@ if LISTING_RELEASE:
 
 property_assistant = None
 if listing_search is not None and CHAT_MODE == "live" and CHAT_PROVIDER == "nvidia":
-    from conversational import PropertyAssistant
+    from app.chat.conversational import PropertyAssistant
 
     property_assistant = PropertyAssistant(
         required_setting("Nvidia_chat"), listing_search, postgres_corpus, vector_lookup, nvidia_retrieval.rerank,

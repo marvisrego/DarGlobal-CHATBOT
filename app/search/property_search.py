@@ -4,16 +4,15 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 from urllib.parse import urlsplit
 
-from answers import (
+from app.chat.answers import (
     DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL, DAR_WEB_METHOD,
     OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, Evidence, ListingCard, Source,
 )
-from corpus_snapshot import live_snapshot
+from app.data.corpus_snapshot import ROOT, live_snapshot
 
-SNAPSHOT = Path(__file__).resolve().parent / "snapshots" / "property_pilot.jsonl"
+SNAPSHOT = ROOT / "snapshots" / "property_pilot.jsonl"
 LIVE_SNAPSHOT = live_snapshot("v1")
 CURRENCIES = r"SAR|USD|AED|GBP|EUR|OMR|QAR|KWD|BHD|CAD|AUD|INR|JPY"
 CAP = r"(\b(?:under|below|less than|up to|at most|no more than|max(?:imum)?(?: price)?)\b|<=|<)"

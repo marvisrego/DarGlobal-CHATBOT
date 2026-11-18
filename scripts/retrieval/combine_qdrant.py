@@ -10,12 +10,12 @@ from psycopg import connect
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from corpus_snapshot import RELEASES, ROOT, live_snapshot
-from scripts.index_qdrant import load_payloads, read_payloads
-from listing_pilot import collection_name
-from listing_store import RELEASES as LISTING_RELEASES, TABLE, database_settings, vector_config
-import nvidia_api
-from property_vectors import compatible_collection, corpus_point_id, qdrant_endpoint
+from app.data.corpus_snapshot import RELEASES, ROOT, live_snapshot
+from scripts.retrieval.index_qdrant import load_payloads, read_payloads
+from app.data.listing_pilot import collection_name
+from app.data.listing_store import RELEASES as LISTING_RELEASES, TABLE, database_settings, vector_config
+from app.chat import nvidia_api
+from app.search.property_vectors import compatible_collection, corpus_point_id, qdrant_endpoint
 
 
 def checked_points(client, name, expected):

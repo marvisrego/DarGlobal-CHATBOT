@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from corpus_snapshot import RELEASES, ROOT, live_snapshot
-from property_search import search
+from app.data.corpus_snapshot import RELEASES, ROOT, live_snapshot
+from app.search.property_search import search
 
 LIVE_GUIDE_CASE = {
     "id": "offplan",
@@ -39,7 +39,7 @@ def normalized_fact(text):
 
 
 def benchmark_embeddings():
-    from property_vectors import Embedder
+    from app.search.property_vectors import Embedder
 
     cases = json.loads((ROOT / "evaluation/qdrant-queries.json").read_text(encoding="utf-8"))
     start = perf_counter()

@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import expect, sync_playwright
 
-from answers import DAR_REPORT_CITATION, WASALT_GUIDE_URL
+from app.chat.answers import DAR_REPORT_CITATION, WASALT_GUIDE_URL
 
 REPORT_SHA256 = "39426ee0815355f2f76aa68e31394194269a38b1be3886a90ab6fef16803be0a"
 COMPARISON = ("At Tierra Viva and Les Vagues, which one offers villas, and which one includes retail? "

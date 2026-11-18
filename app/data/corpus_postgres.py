@@ -4,8 +4,8 @@ from psycopg import Error, connect
 from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
-from corpus_snapshot import COLUMNS, CorpusUnavailable, load_snapshot, normalize_record
-from property_search import valid_citation
+from app.data.corpus_snapshot import COLUMNS, CorpusUnavailable, load_snapshot, normalize_record
+from app.search.property_search import valid_citation
 
 
 class PostgresCorpus:

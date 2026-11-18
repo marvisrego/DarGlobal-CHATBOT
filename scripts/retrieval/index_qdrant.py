@@ -16,12 +16,12 @@ from dotenv import dotenv_values
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from corpus_snapshot import RELEASES, ROOT, live_snapshot, load_snapshot, snapshot_digest
-from property_search import search, valid_citation
-from property_vectors import (
+from app.data.corpus_snapshot import RELEASES, ROOT, live_snapshot, load_snapshot, snapshot_digest
+from app.search.property_search import search, valid_citation
+from app.search.property_vectors import (
     DIMENSION, EMBEDDING, MODEL, REVISION, Embedder, compatible_collection, corpus_point_id, qdrant_endpoint,
 )
-import nvidia_api
+from app.chat import nvidia_api
 
 
 LOCAL_COLLECTION = "darglobal-wasalt-minilm-v1"

@@ -7,7 +7,7 @@ import re
 
 from playwright.sync_api import Error, sync_playwright
 
-from corpus_snapshot import ROOT
+from app.data.corpus_snapshot import ROOT
 
 
 def main():

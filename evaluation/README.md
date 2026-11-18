@@ -77,10 +77,10 @@ captures remain under ignored `local_html/`.
 ```powershell
 python -m pip install -r requirements.txt
 python -m pip install PyMuPDF==1.27.2.3 playwright==1.65.2
-python -m scripts.capture_guides
-python -m scripts.ingest --expand-corpus local_html/expanded_guides.json
-python -m scripts.evaluate_corpus --output exports/corpus-results.json
-python -m scripts.evaluate_corpus --openrouter --output exports/openrouter-results.json
+python -m scripts.data.capture_guides
+python -m scripts.data.ingest --expand-corpus local_html/expanded_guides.json
+python -m scripts.checks.evaluate_corpus --output exports/corpus-results.json
+python -m scripts.checks.evaluate_corpus --openrouter --output exports/openrouter-results.json
 ```
 
 If the Chrome captures are already present, skip `capture_guides` to use the

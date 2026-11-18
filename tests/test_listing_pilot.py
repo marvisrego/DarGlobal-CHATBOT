@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from listing_pilot import Listing, listing_intent, listing_result, parse_listing_query
+from app.data.listing_pilot import Listing, listing_intent, listing_result, parse_listing_query
 
 
 def wasalt_fixture(source_id="9999991", **overrides):
@@ -43,7 +43,7 @@ class ListingPilotTests(unittest.TestCase):
         self.assertEqual((query.transaction_type, query.rent_period), ("rent", "month"))
 
     def test_price_range_uses_both_inclusive_bounds(self):
-        from listing_store import select_listings
+        from app.data.listing_store import select_listings
 
         query = parse_listing_query(
             "Find 3-bedroom apartments in Riyadh between SAR 500,000 and SAR 600,000.", ["riyadh"],
@@ -70,7 +70,7 @@ class ListingPilotTests(unittest.TestCase):
 
     def test_followup_is_scoped_to_previous_listing_ids(self):
         import main
-        from listing_store import search_listings
+        from app.data.listing_store import search_listings
 
         expensive = Listing.model_validate(wasalt_fixture("9999992", asking_price="600000"))
         cheap = Listing.model_validate(wasalt_fixture())

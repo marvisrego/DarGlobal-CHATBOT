@@ -9,7 +9,7 @@ from time import sleep
 
 import httpx
 
-from corpus_snapshot import snapshot_digest
+from app.data.corpus_snapshot import snapshot_digest
 CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 CHAT_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions"
 EMBED_MODEL = "nvidia/nemotron-3.5-embed-1b"

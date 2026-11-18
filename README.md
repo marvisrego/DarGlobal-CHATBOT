@@ -36,4 +36,11 @@ Render builds the [Dockerfile](Dockerfile) from `main` using a Python 3.13 slim 
 
 The hosted app reads project, guide, and listing facts from Supabase Postgres. NVIDIA Nemotron Ultra chooses a read-only search tool when a question needs property data. Qdrant supplies semantic candidates from one shared collection with **53 vectors**. Postgres enforces the listing filters and supplies the canonical facts and links used for the answer. [Live health check](https://darglobal-chatbot-4x3v.onrender.com/health)
 
-The browser interface is in [static/](static/), the maintenance tools are in [scripts/](scripts/), and verification is organized under [tests/](tests/) and [evaluation/](evaluation/).
+## Repository layout
+
+| Folder | Contents |
+| --- | --- |
+| [app/](app/) | Chat and model integrations, data access, and retrieval |
+| [static/](static/) | Browser interface |
+| [scripts/](scripts/) | Data preparation, Qdrant maintenance, and demo checks |
+| [tests/](tests/) and [evaluation/](evaluation/) | Automated tests, regression prompts, and source coverage |

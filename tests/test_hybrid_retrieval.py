@@ -4,8 +4,8 @@ from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
-from hybrid_retrieval import HybridLookup
-from property_search import search
+from app.search.hybrid_retrieval import HybridLookup
+from app.search.property_search import search
 
 
 class HybridRetrievalTests(unittest.TestCase):
@@ -37,7 +37,7 @@ class HybridRetrievalTests(unittest.TestCase):
         with (
             patch.object(main, "vector_lookup", lookup),
             patch.object(lookup, "_initialize", side_effect=TimeoutError("api-key: example-secret")) as initialize,
-            self.assertLogs("hybrid_retrieval", level="WARNING") as logs,
+            self.assertLogs(HybridLookup.__module__, level="WARNING") as logs,
             TestClient(main.app) as client,
         ):
             self.assertEqual(client.get("/health").json(), {"status": "ok"})

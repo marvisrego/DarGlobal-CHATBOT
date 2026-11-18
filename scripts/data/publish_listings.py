@@ -13,12 +13,12 @@ from psycopg import connect
 from psycopg.rows import dict_row
 from qdrant_client import QdrantClient, models
 
-from corpus_snapshot import ROOT
-from scripts.index_qdrant import ensure_collection, hosted_passage_vectors, read_payloads, verify
-from listing_pilot import PUBLISHERS, Listing, collection_name
-from listing_store import RELEASES, ROW_FIELDS, TABLE, database_settings, vector_config
-from nvidia_api import NvidiaRetrievalAPI
-from property_vectors import corpus_point_id, qdrant_endpoint
+from app.data.corpus_snapshot import ROOT
+from scripts.retrieval.index_qdrant import ensure_collection, hosted_passage_vectors, read_payloads, verify
+from app.data.listing_pilot import PUBLISHERS, Listing, collection_name
+from app.data.listing_store import RELEASES, ROW_FIELDS, TABLE, database_settings, vector_config
+from app.chat.nvidia_api import NvidiaRetrievalAPI
+from app.search.property_vectors import corpus_point_id, qdrant_endpoint
 
 
 MIGRATION = ROOT / "supabase/migrations/20261118180000_create_property_listings.sql"
