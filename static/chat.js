@@ -132,8 +132,15 @@ function renderConversation({ scroll = false } = {}) {
     const reply = element("div", "reply");
     reply.append(element("h2", "", "Research assistant"));
     if (turn.response) {
-      for (const paragraph of turn.response.answer.split("\n\n")) {
-        reply.append(element("p", "", paragraph));
+      for (const paragraph of turn.response.answer.split(/\n\s*\n/)) {
+        const bullets = paragraph.trim().split("\n").map((line) => line.match(/^[-*•]\s+(.+)$/));
+        if (bullets.every(Boolean)) {
+          const list = element("ul", "answer-list");
+          for (const bullet of bullets) list.append(element("li", "", bullet[1]));
+          reply.append(list);
+        } else {
+          reply.append(element("p", "", paragraph));
+        }
       }
       if (turn.response.sources.length) reply.append(renderSources(turn.response));
     } else if (pending.get(chat.id) === turn) {

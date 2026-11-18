@@ -42,7 +42,7 @@ QDRANT_URL=<Qdrant HTTPS endpoint>
 QDRANT_API_KEY=<Qdrant key with read access to the verified collection>
 ```
 
-For live OpenRouter ranking also set `CHAT_MODE=live` and
+For live OpenRouter answers also set `CHAT_MODE=live` and
 `OPENROUTER_API_KEY`. The chatbot pins the collection name. The indexer's
 `QDRANT_COLLECTION` setting is independent.
 
