@@ -1,4 +1,5 @@
 import unittest
+import json
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -7,7 +8,7 @@ from pydantic import ValidationError
 
 from answers import Evidence
 from conversational import PropertyAssistant
-from corpus_snapshot import CorpusUnavailable
+from corpus_snapshot import CorpusUnavailable, live_snapshot
 from listing_pilot import ListingFilters, ListingToolArgs
 from listing_store import resolve_filters
 from property_search import SearchResult
@@ -80,3 +81,16 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
         reply = await assistant.compose(None, [], result, "search_knowledge", "test")
         self.assertEqual(reply.path, "source_summary")
         self.assertEqual(reply.answer, "From the guide.\n\nVerify the title deed.")
+
+    def test_knowledge_rewrite_can_disambiguate_vector_candidates(self):
+        records = [json.loads(line) for line in live_snapshot("v2").read_text(encoding="utf-8").splitlines()]
+        vector = Mock(return_value=[("guide:buyer-checks", 0.72), ("guide:offplan-risk", 0.71)])
+        assistant = PropertyAssistant("unused", Mock(), lambda: records, vector, lambda _, passages: range(len(passages)))
+        reply = assistant.search_knowledge(
+            "How can I see if the builder has a good history before I buy a home that has yet to be built?",
+            "Developer track record and off-plan risk", "test",
+        )
+        self.assertEqual(reply.passage_ids, ["guide:offplan-risk"])
+        self.assertEqual(reply.retrieval_path, "qdrant")
+        self.assertIn("track record", reply.facts[0])
+        vector.assert_called_once()

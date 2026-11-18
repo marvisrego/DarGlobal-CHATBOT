@@ -33,7 +33,9 @@ TOOLS = [
          "Start with transaction_type sale for buying requests. Keep city empty for broad requests. "
          "Use refine_previous for filter-only follow-ups and cheapest_previous for comparisons of displayed prices."),
         ("search_knowledge", "Search project announcements and Wasalt buyer guides. Use for named projects, "
-         "development values, project asking prices, and real estate research or guidance."),
+         "development values, project asking prices, and real estate research or guidance. Use precise real estate "
+         "terms in query, such as developer track record and off-plan risk for checking a builder's history "
+         "before construction."),
     )
 ]
 ROUTING = (
@@ -140,6 +142,13 @@ class PropertyAssistant:
             return scoped or self.vector_lookup(message, eligible_ids=eligible_ids)
 
         result = corpus_search(original, records, vector_lookup=lookup, rerank=self.rerank)
+        if hits and (result.retrieval_path == "qdrant" or not result.facts):
+            rewritten = corpus_search(query, records)
+            vector_ids = {key for key, _ in hits}
+            if (rewritten.has_guide and rewritten.passage_ids
+                    and all(key.startswith("guide:") and key in vector_ids for key in rewritten.passage_ids)):
+                rewritten.retrieval_path = "qdrant"
+                result = rewritten
         if not result.facts and (hits is None or result.retrieval_path.endswith("qdrant_failure")):
             raise CorpusUnavailable("knowledge_search_unavailable")
         if hits is None:
