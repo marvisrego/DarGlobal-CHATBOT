@@ -2,17 +2,21 @@
 
 import argparse
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack, closing
-from functools import partial
 import json
+import math
 from pathlib import Path
 import re
+from tempfile import NamedTemporaryFile
+
+import httpx
 
 from dotenv import dotenv_values
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
-from corpus_snapshot import ROOT, SNAPSHOT, load_snapshot
+from corpus_snapshot import RELEASES, ROOT, live_snapshot, load_snapshot, snapshot_digest
 from property_search import search, valid_citation
 from property_vectors import (
     DIMENSION, EMBEDDING, MODEL, REVISION, Embedder, compatible_collection, corpus_point_id, qdrant_endpoint,
@@ -29,12 +33,13 @@ class IndexingError(Exception):
     """An operational error whose message is safe to print."""
 
 
-def load_payloads():
-    rows = load_snapshot(SNAPSHOT)
+def load_payloads(version="v1"):
+    rows = load_snapshot(live_snapshot(version))
+    _, projects, sections, articles = RELEASES[version]
     counts = Counter((row["publisher"], row["record_type"]) for row in rows.values())
     guides = {row["canonical_url"] for row in rows.values() if row["record_type"] == "buyer_guide"}
-    if counts != {("Dar Global PLC", "project"): 11, ("Wasalt", "buyer_guide"): 14} or len(guides) != 7:
-        raise IndexingError("Expected 11 Dar Global PLC projects and 14 sections across seven Wasalt guides.")
+    if counts != {("Dar Global PLC", "project"): projects, ("Wasalt", "buyer_guide"): sections} or len(guides) != articles:
+        raise IndexingError(f"Expected {projects} DarGlobal projects and {sections} sections across {articles} guides.")
     payloads = {}
     for record_id, row in rows.items():
         info = row["metadata"]
@@ -70,7 +75,7 @@ def open_collection(args):
     values = dotenv_values(ROOT / ".env", interpolate=False)
     settings = {key: (values.get(key) or "").strip() for key in SETTINGS}
     if args.nvidia:
-        settings["QDRANT_COLLECTION"] = nvidia_api.COLLECTION
+        settings["QDRANT_COLLECTION"] = nvidia_api.collection_for_release(args.corpus_version)
     elif args.collection:
         settings["QDRANT_COLLECTION"] = args.collection
     missing = [key for key, value in settings.items() if not value]
@@ -121,14 +126,64 @@ def read_payloads(client, name, payloads):
 def verify(client, name, payloads):
     actual = read_payloads(client, name, payloads)
     if actual != payloads or client.count(name, exact=True).count != len(payloads):
-        raise IndexingError("Qdrant read-back did not match all 25 expected payloads.")
+        raise IndexingError(f"Qdrant read-back did not match all {len(payloads)} expected payloads.")
     samples = {"project:aida", "guide:buyer-checks"}
     for payload in actual.values():
         if payload["record_id"] in samples:
             print(f"Verified citation metadata for {payload['record_id']} ({payload['publisher']}).")
 
 
-def evaluate(client, name, embedder):
+def hosted_passage_vectors(embedder, snapshot, payloads):
+    digest = snapshot_digest(snapshot)
+    path = ROOT / "exports" / f"nvidia-passage-vectors-{digest}.json"
+    vectors = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    if not isinstance(vectors, dict) or any(
+        key not in payloads or len(vector) != nvidia_api.DIMENSION
+        or not all(math.isfinite(value) for value in vector) or not any(vector)
+        for key, vector in vectors.items()
+    ):
+        raise IndexingError("The local NVIDIA embedding checkpoint is invalid.")
+
+    def save():
+        path.parent.mkdir(exist_ok=True)
+        with NamedTemporaryFile(dir=path.parent, mode="w", encoding="utf-8", delete=False) as checkpoint:
+            temporary = Path(checkpoint.name)
+            try:
+                json.dump(vectors, checkpoint, allow_nan=False)
+                checkpoint.close()
+                temporary.replace(path)
+            finally:
+                checkpoint.close()
+                temporary.unlink(missing_ok=True)
+
+    for size in (4, 1):
+        missing = [key for key in payloads if key not in vectors]
+        if not missing:
+            break
+        batches = [missing[index:index + size] for index in range(0, len(missing), size)]
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            work = {
+                pool.submit(embedder.encode, [payloads[key]["text"] for key in batch], input_type="passage"): batch
+                for batch in batches
+            }
+            for task in as_completed(work):
+                try:
+                    results = task.result()
+                except (httpx.TimeoutException, httpx.NetworkError):
+                    continue
+                except httpx.HTTPStatusError as error:
+                    if error.response.status_code == 429 or error.response.status_code >= 500:
+                        continue
+                    raise
+                vectors.update(zip(work[task], results, strict=True))
+                save()
+        print(f"Validated NVIDIA passage embeddings: {len(vectors)}/{len(payloads)}.", flush=True)
+    if len(vectors) != len(payloads):
+        raise IndexingError("Some NVIDIA passage embeddings timed out. Rerun the command to resume the local checkpoint.")
+    return [vectors[key] for key in payloads]
+
+
+def evaluate(client, name, embedder, version):
     questions = json.loads((EVALUATION / "questions.json").read_text(encoding="utf-8"))
     extra = json.loads((EVALUATION / "qdrant-queries.json").read_text(encoding="utf-8"))
     baseline = {
@@ -136,6 +191,8 @@ def evaluate(client, name, embedder):
         for entry in json.loads((EVALUATION / "baseline.json").read_text(encoding="utf-8"))
     }
     cases = questions + extra
+    if version == "v2":
+        cases += json.loads((EVALUATION / "expansion-queries.json").read_text(encoding="utf-8"))
     vectors = embedder.encode([case["question"] for case in cases])
     results = []
     for case, vector in zip(cases, vectors, strict=True):
@@ -143,7 +200,7 @@ def evaluate(client, name, embedder):
                                      search_params=models.SearchParams(exact=True)).points
         rankings = {
             "qdrant": [point.payload["record_id"] for point in points],
-            "current": search(case["question"], live_data=True).passage_ids,
+            "current": search(case["question"], snapshot=live_snapshot(version), live_data=True).passage_ids,
         }
         if case["id"] in baseline:
             rankings["baseline"] = baseline[case["id"]]
@@ -171,32 +228,37 @@ def main():
     target.add_argument("--collection", help="Override QDRANT_COLLECTION for this invocation")
     target.add_argument("--nvidia", action="store_true", help="Use hosted NVIDIA embeddings and the dedicated collection")
     parser.add_argument("--output", type=Path, help="Write the evaluation trace as JSON")
+    parser.add_argument("--corpus-version", choices=RELEASES, default="v1")
     args = parser.parse_args()
     if args.output and not args.evaluate:
         parser.error("--output requires --evaluate")
+    if args.corpus_version == "v2" and not args.nvidia:
+        parser.error("the expanded collection requires --nvidia")
     stage = "snapshot validation"
     resources = ExitStack()
     try:
-        payloads = load_payloads()
-        print("Validated 25 live passages: 11 DarGlobal projects and 14 sections across seven Wasalt guides.")
+        payloads = load_payloads(args.corpus_version)
+        _, projects, sections, articles = RELEASES[args.corpus_version]
+        print(f"Validated {len(payloads)} live passages: {projects} DarGlobal projects "
+              f"and {sections} sections across {articles} Wasalt guides.")
         stage = "embedding setup"
         config = {}
         if args.nvidia:
             key = (dotenv_values(ROOT / ".env", interpolate=False).get("Nvidia_Embed") or "").strip()
             if not key:
                 raise IndexingError("Set Nvidia_Embed in local .env.")
-            embedder = resources.enter_context(closing(nvidia_api.NvidiaRetrievalAPI(key, timeout=20.0)))
-            passage_encode = partial(embedder.encode, input_type="passage")
-            config = {"dimension": nvidia_api.DIMENSION, "embedding": nvidia_api.EMBEDDING}
+            embedder = resources.enter_context(closing(nvidia_api.NvidiaRetrievalAPI(key, timeout=10.0)))
+            snapshot = live_snapshot(args.corpus_version)
+            config = nvidia_api.vector_config_for_release(args.corpus_version, snapshot)
             print(f"Embedding model: {nvidia_api.EMBED_MODEL}, expected {nvidia_api.DIMENSION} dimensions.")
         else:
             embedder = Embedder()
-            passage_encode = embedder.encode
             print(f"Embedding model: {MODEL}@{REVISION}, {DIMENSION} dimensions.")
         stage = "passage embedding"
         vectors = None
         if args.dry_run or (args.nvidia and not args.evaluate):
-            vectors = passage_encode([payload["text"] for payload in payloads.values()])
+            vectors = (hosted_passage_vectors(embedder, snapshot, payloads) if args.nvidia
+                       else embedder.encode([payload["text"] for payload in payloads.values()]))
             print(f"Verified {len(vectors)} passage vectors with {len(vectors[0])} dimensions.")
         if args.dry_run:
             return
@@ -208,12 +270,12 @@ def main():
             if args.evaluate:
                 stage = "Qdrant evaluation"
                 verify(client, name, payloads)
-                results = evaluate(client, name, embedder)
+                results = evaluate(client, name, embedder, args.corpus_version)
             else:
                 read_payloads(client, name, payloads)
                 stage = "passage embedding"
                 if vectors is None:
-                    vectors = passage_encode([payload["text"] for payload in payloads.values()])
+                    vectors = embedder.encode([payload["text"] for payload in payloads.values()])
                 points = [
                     models.PointStruct(id=point_id, vector=vector, payload=payload)
                     for (point_id, payload), vector in zip(payloads.items(), vectors, strict=True)
@@ -221,7 +283,7 @@ def main():
                 stage = "Qdrant upsert and read-back"
                 client.upsert(name, points=points, wait=True, ordering=models.WriteOrdering.STRONG)
                 verify(client, name, payloads)
-                print(f"{'Created' if created else 'Reused'} {name}. Verified exactly 25 points.")
+                print(f"{'Created' if created else 'Reused'} {name}. Verified exactly {len(payloads)} points.")
         if args.output:
             stage = "evaluation output"
             args.output.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

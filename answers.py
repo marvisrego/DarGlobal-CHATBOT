@@ -13,6 +13,7 @@ DAR_REPORT_CITATION = (
     "https://cdn.darglobal.co.uk/Dar%20Global%20-%20HY%202026%20Results%20Presentation%20-%20Final.pdf#page=24"
 )
 DAR_REPORT_METHOD = "httpx_regulatory_pdf"
+DAR_WEB_METHOD = "browser_visible_project_summary"
 WASALT_GUIDE_URL = "https://blog.wasalt.sa/en/how-to-buy-a-house-in-saudi-arabia/"
 WASALT_GUIDE_METHOD = "browser_visible_guide_summary"
 

@@ -19,9 +19,10 @@ RUN if [ "$PROPERTY_RETRIEVAL_MODE" = "hybrid" ]; then \
         pip install --no-cache-dir -r requirements.txt; \
     fi
 
-COPY main.py answers.py openrouter_provider.py property_search.py hybrid_retrieval.py nvidia_api.py ./
+COPY main.py answers.py corpus_snapshot.py openrouter_provider.py property_search.py hybrid_retrieval.py nvidia_api.py ./
 COPY static/ ./static/
 COPY deploy_data/property_live.jsonl ./snapshots/property_live.jsonl
+COPY deploy_data/property_live_v2.jsonl ./snapshots/property_live_v2.jsonl
 
 USER 10001:10001
 EXPOSE 10000

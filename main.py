@@ -14,6 +14,7 @@ from pydantic import BaseModel, StringConstraints
 from starlette.concurrency import run_in_threadpool
 
 from answers import ChatReply
+from corpus_snapshot import RELEASES, live_snapshot
 import nvidia_api
 from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
 from property_search import search
@@ -31,6 +32,12 @@ if DATA_MODE not in {"fixture", "live"}:
 RETRIEVAL_MODE = os.getenv("PROPERTY_RETRIEVAL_MODE", "jsonl").strip().lower()
 if RETRIEVAL_MODE not in {"jsonl", "hybrid", "nvidia"}:
     raise RuntimeError("PROPERTY_RETRIEVAL_MODE must be jsonl, hybrid, or nvidia.")
+CORPUS_VERSION = os.getenv("PROPERTY_CORPUS_VERSION", "v1").strip().lower()
+if CORPUS_VERSION not in RELEASES:
+    raise RuntimeError("PROPERTY_CORPUS_VERSION must be v1 or v2.")
+if DATA_MODE == "live" and CORPUS_VERSION == "v2" and RETRIEVAL_MODE == "hybrid":
+    raise RuntimeError("The v2 corpus requires jsonl or nvidia retrieval.")
+corpus_file = live_snapshot(CORPUS_VERSION) if DATA_MODE == "live" else None
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "openrouter").strip().lower()
 if CHAT_PROVIDER not in {"openrouter", "nvidia"}:
     raise RuntimeError("CHAT_PROVIDER must be openrouter or nvidia.")
@@ -54,8 +61,9 @@ if RETRIEVAL_MODE in {"hybrid", "nvidia"} and DATA_MODE == "live":
             required_setting("Nvidia_Embed"), required_setting("Nvidia_rerank")
         )
         vector_lookup = HybridLookup(
-            collection=nvidia_api.COLLECTION, limit=nvidia_api.RERANK_LIMIT, embedder=nvidia_retrieval,
-            vector_config={"dimension": nvidia_api.DIMENSION, "embedding": nvidia_api.EMBEDDING},
+            collection=nvidia_api.collection_for_release(CORPUS_VERSION),
+            limit=nvidia_api.RERANK_LIMIT, embedder=nvidia_retrieval,
+            vector_config=nvidia_api.vector_config_for_release(CORPUS_VERSION, corpus_file),
             cooldown=0,
         )
     else:
@@ -89,6 +97,7 @@ async def health(response: Response):
     if re.fullmatch(r"[0-9a-f]{40}", DEPLOY_COMMIT):
         response.headers["X-Deploy-Commit"] = DEPLOY_COMMIT
     response.headers["X-Retrieval-Mode"] = RETRIEVAL_MODE if vector_lookup is not None else "jsonl"
+    response.headers["X-Corpus-Version"] = CORPUS_VERSION if DATA_MODE == "live" else "fixture"
     return {"status": "ok"}
 
 
@@ -128,7 +137,7 @@ async def chat(
     request_id = uuid4().hex
     response.headers["X-Request-ID"] = request_id
     result = await run_in_threadpool(
-        search, request.message, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
+        search, request.message, snapshot=corpus_file, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
         rerank=nvidia_retrieval.rerank if nvidia_retrieval is not None else None,
     )
     inference_model = None

@@ -1,6 +1,7 @@
 """Validate and normalize the real DarGlobal and Wasalt corpus."""
 
 from datetime import date, datetime
+from hashlib import sha256
 import json
 from pathlib import Path
 import re
@@ -9,6 +10,22 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
 SNAPSHOT = ROOT / "snapshots" / "property_live.jsonl"
+RELEASES = {
+    "v1": ("property_live.jsonl", 11, 14, 7),
+    "v2": ("property_live_v2.jsonl", 14, 23, 9),
+}
+
+
+def live_snapshot(version):
+    filename = RELEASES[version][0]
+    tracked = ROOT / "deploy_data" / filename
+    return tracked if tracked.is_file() else SNAPSHOT.with_name(filename)
+
+
+def snapshot_digest(path):
+    return sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 COLUMNS = {
     "record_id": "text",
     "publisher": "text",
@@ -115,6 +132,8 @@ def normalize_record(record):
             text_value(record, "location", optional=True),
             text_value(record, "property_type", optional=True),
             text_value(record, "status", optional=True),
+            text_value(record, "development_value", optional=True),
+            *text_list(record, "details", optional=True),
             *text_list(record, "amenities", optional=True),
         ])
     elif record_type == "buyer_guide" and record.get("source") == "Wasalt":

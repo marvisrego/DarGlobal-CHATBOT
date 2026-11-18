@@ -8,6 +8,7 @@ from time import sleep
 
 import httpx
 
+from corpus_snapshot import snapshot_digest
 CHAT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 CHAT_ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions"
 EMBED_MODEL = "nvidia/nemotron-3.5-embed-1b"
@@ -25,6 +26,17 @@ EMBEDDING = {
 }
 RERANK_LIMIT = 8
 LOGGER = logging.getLogger("uvicorn.error.darglobal")
+
+
+def collection_for_release(version):
+    return f"{COLLECTION.rsplit('-', 1)[0]}-{version}"
+
+
+def vector_config_for_release(version, snapshot):
+    embedding = EMBEDDING
+    if version != "v1":
+        embedding = {**EMBEDDING, "snapshot_sha256": snapshot_digest(snapshot)}
+    return {"dimension": DIMENSION, "embedding": embedding}
 
 
 class NvidiaRetrievalAPI:

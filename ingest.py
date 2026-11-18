@@ -13,9 +13,11 @@ import httpx
 from bs4 import BeautifulSoup
 
 from answers import (
-    DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL,
+    DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL, DAR_WEB_METHOD,
     OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, WASALT_GUIDE_URL,
 )
+from corpus_snapshot import load_snapshot, normalize_record
+from property_search import valid_citation
 
 ROOT = Path(__file__).resolve().parent
 FIXTURES = ROOT / "ingestion_fixtures"
@@ -498,6 +500,66 @@ def expanded_records(capture_path, omran):
             }
 
 
+def append_corpus(base, capture_path):
+    load_snapshot(base)
+    records = [
+        json.loads(line) for line in base.read_text(encoding="utf-8-sig").splitlines() if line.strip()
+    ]
+    captures = json.loads(capture_path.read_text(encoding="utf-8"))
+    manifest = json.loads((ROOT / "data_sources" / "corpus_expansion.json").read_text(encoding="utf-8"))
+    ids = {record["record_id"] for record in records}
+
+    def capture_for(url):
+        capture = captures[url]
+        if capture["url"] != url or capture["status"] != 200 or re.search(
+            r"just a moment|access denied|captcha", capture["title"], re.IGNORECASE
+        ):
+            raise ValueError(f"unverified source capture for {url}")
+        return capture_time(capture["collected_at"]), capture["text"]
+
+    def append(record, evidence, body):
+        if not all(term.casefold() in body.casefold() for term in evidence):
+            raise ValueError(f"capture did not verify {record['record_id']}")
+        normalize_record(record)
+        if not valid_citation(record) or record["record_id"] in ids:
+            raise ValueError(f"invalid citation or duplicate ID for {record['record_id']}")
+        ids.add(record["record_id"])
+        records.append(record)
+
+    for project in manifest["projects"]:
+        fields = {key: value for key, value in project.items() if key not in {"url", "id", "evidence"}}
+        url = project["url"]
+        captured, body = capture_for(url)
+        append({
+            **fields, "record_id": f"project:{project['id']}", "source": "DarGlobal", "publisher": "Dar Global PLC",
+            "record_type": "project", "source_type": "issuer_project_webpage", "mode": "live",
+            "collection_method": DAR_WEB_METHOD, "source_url": url, "canonical_url": url,
+            "location": "Jeddah, Saudi Arabia", "collected_at": captured,
+        }, [project["section"], *project["evidence"]], " ".join(body.split()))
+
+    for guide in manifest["guides"]:
+        url = guide["url"]
+        captured, body = capture_for(url)
+        date = datetime.fromisoformat(guide["source_as_of"])
+        date_text = f"{date.day} {date:%B} {date.year}"
+        if date_text not in " ".join(body.replace("،", " ").split()):
+            raise ValueError(f"capture did not verify publication date for {url}")
+        lines = [line.strip() for line in body.splitlines() if line.strip()]
+        for section in guide["sections"]:
+            heading = section["section"]
+            starts = [i for i, line in enumerate(lines) if line == heading]
+            if not starts:
+                raise ValueError(f"capture lacks section {heading}")
+            append({
+                "record_id": f"guide:{section['id']}", "source": "Wasalt", "publisher": "Wasalt",
+                "record_type": "buyer_guide", "source_type": "publisher_guide_section", "mode": "live",
+                "collection_method": WASALT_GUIDE_METHOD, "source_url": url, "canonical_url": url,
+                "collected_at": captured, "source_as_of": guide["source_as_of"], "title": guide["title"],
+                "section": heading, "points": section["points"], "aliases": section["aliases"],
+            }, section["evidence"], " ".join(lines[starts[-1]:starts[-1] + 8]))
+    return records
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build a local property JSONL snapshot.")
     parser.add_argument("--limit-per-source", type=int, choices=range(1, MAX_PAGES + 1), default=1)
@@ -508,11 +570,29 @@ def main():
                       help="Import a browser-saved detail page; repeat for each page")
     mode.add_argument("--expand-corpus", type=Path, metavar="GUIDE_CAPTURES",
                       help="Build the expanded issuer and guide corpus from local Chrome captures")
+    mode.add_argument("--append-corpus", type=Path, metavar="CAPTURES",
+                      help="Append the release additions from locally saved, verified browser captures")
+    parser.add_argument("--base-snapshot", type=Path, default=ROOT / "deploy_data" / "property_live.jsonl")
     parser.add_argument("--omran-aida", action="store_true", help="Collect AIDA facts from OMRAN's announcement")
     parser.add_argument("--dar-report", action="store_true", help="Collect AIDA facts from Dar Global's filed report")
     parser.add_argument("--wasalt-guide", nargs=2, metavar=("SNAPSHOT", "CAPTURED_AT"),
                         help="Summarize the Wasalt buyer guide from a local Playwright snapshot")
     args = parser.parse_args()
+
+    if args.append_corpus:
+        output = args.output or ROOT / "deploy_data" / "property_live_v2.jsonl"
+        if output.resolve() in {FIXTURE_OUTPUT.resolve(), args.base_snapshot.resolve()} or output.suffix != ".jsonl":
+            parser.error("the expanded corpus requires a separate .jsonl output")
+        try:
+            path = args.append_corpus.resolve()
+            if path.is_relative_to(ROOT) and not path.is_relative_to(ROOT / "local_html"):
+                raise ValueError("keep publisher captures under local_html/ or outside the repository")
+            records = append_corpus(args.base_snapshot, path)
+            write_snapshot(output, records)
+            print(f"Validated and wrote {len(records)} passages to {output}")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            parser.exit(1, f"Could not append corpus: {error}\n")
+        return 0
 
     if args.expand_corpus:
         output = args.output or ROOT / "snapshots" / "property_live.jsonl"
