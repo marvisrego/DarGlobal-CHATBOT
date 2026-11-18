@@ -53,7 +53,7 @@ class Embedder:
         return (pooled / norms).astype(np.float32).tolist()
 
 
-def compatible_collection(config, *, dimension=DIMENSION, embedding=EMBEDDING):
+def compatible_collection(config, *, dimension=DIMENSION, embedding=EMBEDDING, metadata_key="corpus_embedding"):
     vectors = config.params.vectors
     return (
         isinstance(vectors, models.VectorParams)
@@ -61,7 +61,7 @@ def compatible_collection(config, *, dimension=DIMENSION, embedding=EMBEDDING):
         and vectors.distance == models.Distance.COSINE
         and vectors.datatype in {None, models.Datatype.FLOAT32}
         and vectors.multivector_config is None
-        and (config.metadata or {}).get("corpus_embedding") == embedding
+        and (config.metadata or {}).get(metadata_key) == embedding
     )
 
 

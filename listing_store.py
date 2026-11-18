@@ -85,18 +85,20 @@ def search_listings(connection, release, message, lookup_for_release):
 
 
 class PostgresListings:
-    def __init__(self, dsn, release, embedder):
+    def __init__(self, dsn, release, embedder, *, shared_collection=None):
         try:
             self._settings = database_settings(dsn)
         except Error:
             raise RuntimeError("DATABASE_URL is not a valid Postgres connection setting.") from None
         self._release = release
-        self._collection = collection_name(release)
+        self._collection = shared_collection or collection_name(release)
+        self._metadata_key = "listing_embedding" if shared_collection else "corpus_embedding"
         self._embedder = embedder
 
     def _lookup(self, digest):
         return HybridLookup(collection=self._collection, limit=RESULT_LIMIT, embedder=self._embedder,
-                            vector_config=vector_config(digest), cooldown=0, structured_backend="Postgres")
+                            vector_config={**vector_config(digest), "metadata_key": self._metadata_key},
+                            cooldown=0, structured_backend="Postgres")
 
     def __call__(self, message):
         try:
