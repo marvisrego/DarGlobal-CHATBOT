@@ -1,0 +1,203 @@
+[
+  {
+    "id": "aida",
+    "kind": "exact",
+    "question": "Where is AIDA?",
+    "expected": [
+      "project:aida"
+    ],
+    "facts": [
+      "Muscat, Oman",
+      "Villas and apartments",
+      "2026-06-30"
+    ],
+    "support": [
+      "OMRAN Group"
+    ]
+  },
+  {
+    "id": "tierra",
+    "kind": "exact",
+    "question": "Where is Tierra Viva and what are its homes?",
+    "expected": [
+      "project:tierra-viva"
+    ],
+    "facts": [
+      "Benahavís, Spain",
+      "Villas"
+    ],
+    "support": []
+  },
+  {
+    "id": "astera",
+    "kind": "paraphrase",
+    "question": "Where is the Aston Martin beachfront development?",
+    "expected": [
+      "project:astera"
+    ],
+    "facts": [
+      "Ras Al Khaimah, UAE",
+      "Beachfront residences"
+    ],
+    "support": []
+  },
+  {
+    "id": "mulliner",
+    "kind": "paraphrase",
+    "question": "Was the Old Park Lane project complete in the report?",
+    "expected": [
+      "project:mulliner"
+    ],
+    "facts": [
+      "London, UK",
+      "Completed"
+    ],
+    "support": []
+  },
+  {
+    "id": "compare",
+    "kind": "comparison",
+    "question": "Compare Tierra Viva and Les Vagues across location and property type.",
+    "expected": [
+      "project:tierra-viva",
+      "project:les-vagues"
+    ],
+    "facts": [
+      "Benahavís, Spain",
+      "Lusail, Qatar",
+      "Apartments and retail units"
+    ],
+    "support": []
+  },
+  {
+    "id": "dubai",
+    "kind": "comparison",
+    "question": "Which DarGlobal projects in Dubai were already finished?",
+    "expected": [
+      "project:urban-oasis",
+      "project:da-vinci"
+    ],
+    "facts": [
+      "Urban Oasis Tower",
+      "Da Vinci Tower",
+      "Completed"
+    ],
+    "support": []
+  },
+  {
+    "id": "saudi",
+    "kind": "exact",
+    "question": "Where is Rayana, Wadi Safar?",
+    "expected": [
+      "project:rayana"
+    ],
+    "facts": [
+      "Riyadh, Saudi Arabia",
+      "Private mansions"
+    ],
+    "support": []
+  },
+  {
+    "id": "buyer",
+    "kind": "wasalt",
+    "question": "What does Wasalt's buyer guide suggest checking before making an offer?",
+    "expected": [
+      "guide:buyer-checks"
+    ],
+    "facts": [
+      "title deed",
+      "building permit",
+      "completion certificate"
+    ],
+    "support": []
+  },
+  {
+    "id": "ejar",
+    "kind": "paraphrase",
+    "question": "According to Wasalt, how do I register the lease and pay rent installments?",
+    "expected": [
+      "guide:ejar-process"
+    ],
+    "facts": [
+      "register the contract in Ejar",
+      "installments"
+    ],
+    "support": []
+  },
+  {
+    "id": "commute",
+    "kind": "paraphrase",
+    "question": "What does Wasalt suggest about testing the journey to work before leasing in Riyadh?",
+    "expected": [
+      "guide:expat-commute"
+    ],
+    "facts": [
+      "commute",
+      "before signing a lease"
+    ],
+    "support": []
+  },
+  {
+    "id": "offplan",
+    "kind": "wasalt",
+    "question": "What does Wasalt say about staged payments for off-plan property?",
+    "expected": [
+      "guide:offplan-payment"
+    ],
+    "facts": [
+      "staged payments",
+      "during construction"
+    ],
+    "support": []
+  },
+  {
+    "id": "cross",
+    "kind": "comparison",
+    "question": "Compare AIDA with Wasalt's off-plan risk guidance.",
+    "expected": [
+      "project:aida",
+      "guide:offplan-risk"
+    ],
+    "facts": [
+      "Muscat, Oman",
+      "developer's track record"
+    ],
+    "support": [
+      "OMRAN Group"
+    ]
+  },
+  {
+    "id": "no-listing",
+    "kind": "missing",
+    "question": "Find Wasalt apartments in Riyadh up to SAR 1 million.",
+    "expected": [],
+    "facts": [
+      "No Wasalt listings"
+    ],
+    "support": []
+  },
+  {
+    "id": "no-price",
+    "kind": "missing",
+    "question": "What is the current asking price of AIDA?",
+    "expected": [
+      "project:aida"
+    ],
+    "facts": [
+      "no verified asking price"
+    ],
+    "support": [
+      "OMRAN Group"
+    ]
+  },
+  {
+    "id": "no-project",
+    "kind": "missing",
+    "question": "Where is the DarGlobal Atlantis Berlin project?",
+    "expected": [],
+    "facts": [
+      "No matching DarGlobal project"
+    ],
+    "support": []
+  }
+]

@@ -3,13 +3,13 @@ from pathlib import Path
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StringConstraints
 
 from answers import ChatReply
-from openrouter_provider import ModelUnavailable, OpenRouterAnswerProvider
+from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, OpenRouterAnswerProvider
 from property_search import search
 
 ROOT = Path(__file__).resolve().parent
@@ -48,13 +48,20 @@ async def home():
     if CHAT_MODE == "live":
         html = html.replace('data-mode="mock"', 'data-mode="live"')
     badge = "OpenRouter" if ranker is not None else "Preview"
-    data_label = "Browser-saved data" if DATA_MODE == "live" else "Sample data"
-    html = html.replace("Preview · Sample data", f"{badge} · {data_label}")
+    data_label = "Real corpus" if DATA_MODE == "live" else "Sample data"
+    html = html.replace("Preview: Real corpus", f"{badge}: {data_label}")
     if DATA_MODE == "live":
         html = html.replace('data-data-mode="fixture"', 'data-data-mode="live"')
-        html = html.replace("What is the status of Sample Harbour Residences?", "Where is AIDA?")
-        html = html.replace("Show Sample Harbour Residences alongside Wasalt listings under SAR 1 million.",
-                            "Show AIDA alongside Wasalt listings in Riyadh under SAR 1 million.")
+    else:
+        html = html.replace("Research DarGlobal projects and Wasalt buyer guides. Project status is dated to the source.",
+                            "Try the assistant with fictional records.")
+        html = html.replace("Compare Tierra Viva and Les Vagues across location and property type.",
+                            "What is the status of Sample Harbour Residences?")
+        html = html.replace("What does Wasalt's buyer guide suggest checking before making an offer?",
+                            "Show sample Wasalt listings.")
+        html = html.replace("Summarize AIDA and add Wasalt's guidance on off-plan risk.",
+                            "Show Sample Harbour Residences alongside sample Wasalt listings.")
+        html = html.replace("Project comparison", "Project").replace("Buyer guide", "Sample listings")
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
@@ -65,19 +72,19 @@ async def chat(
 ):
     response.headers["Cache-Control"] = "no-store"
     result = search(request.message, live_data=DATA_MODE == "live")
+    inference_model = None
+    order = list(range(len(result.facts)))
+    message = result.message
     try:
-        order = (
-            await ranker.rank(request.message, result.facts)
-            if ranker is not None and result.facts
-            else list(range(len(result.facts)))
-        )
-    except ModelUnavailable as error:
-        detail = "The model is temporarily unavailable. Please retry."
-        if error.upstream_status is not None:
-            detail = f"OpenRouter could not answer (HTTP {error.upstream_status})."
-        raise HTTPException(status_code=502, detail=detail) from None
+        if ranker is not None and result.facts and result.rankable:
+            model = GUIDE_MODEL if result.has_guide else MODEL
+            order = await ranker.rank(request.message, result.facts, model=model)
+            inference_model = model
+    except ModelUnavailable:
+        message += " Model ranking is temporarily unavailable. Showing the retrieved evidence."
     return ChatReply(
-        answer="\n\n".join([result.message, *(result.facts[index] for index in order)]),
-        sources=[result.sources[index] for index in order],
+        answer="\n\n".join([message, *(result.facts[index] for index in order)]),
+        sources=[*(result.sources[index] for index in order), *result.supporting_sources],
         mode=CHAT_MODE,
+        inference_model=inference_model,
     )

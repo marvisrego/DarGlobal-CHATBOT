@@ -17,10 +17,10 @@ const storageKey = "darglobal-property-chat-v1";
 const pending = new Map();
 const live = document.body.dataset.mode === "live";
 const pendingMessage = live
-  ? "Waiting for the model…"
+  ? "Waiting for the model."
   : document.body.dataset.dataMode === "live"
-    ? "Looking through the saved property pages…"
-    : "Looking through the sample records…";
+    ? "Looking through the property snapshot."
+    : "Looking through the sample records.";
 
 function readState() {
   try {
@@ -105,7 +105,7 @@ function renderSources(data) {
   for (const source of data.sources) {
     const card = element("li");
     const sample = source.fixture ?? (data.mode === "mock");
-    card.append(element("small", "", sample ? `Sample source · ${source.publisher}` : source.publisher));
+    card.append(element("small", "", sample ? `Sample source: ${source.publisher}` : source.publisher));
     if (!sample && /^https?:\/\//i.test(source.url || "")) {
       const link = element("a", "", source.title);
       link.href = source.url;

@@ -1,5 +1,12 @@
 # DarGlobal-CHATBOT
 
+The reviewer demo covers **DarGlobal project information and Wasalt buyer guidance**.
+The validated dataset contains 11 distinct projects and 14 sections from
+seven guides. It contains no real apartment listings, current asking prices,
+or verified unit availability. Project status is dated to the source.
+The [15-question evaluation](evaluation/README.md) is a curated regression set
+with separate retrieval, answer and citation checks.
+
 ## Property ingestion pilot
 
 From the project root, install the Python requirements and run:
@@ -25,7 +32,7 @@ HTML and are unverified against publisher detail pages.
 
 The direct [DarGlobal AIDA page](https://darglobal.co.uk/landing-page/aida)
 opened in Chrome. DarGlobal's terms require written consent for copying or
-reproducing site content, so the pilot recorded no live property data. A
+reproducing site content, so the direct route produced no records. A
 request with `python -m ingest --live --output snapshots/property_live.jsonl`
 reports zero real records and exits without writing a snapshot.
 
@@ -37,14 +44,11 @@ Generate the fixture snapshot with `python -m ingest` before launching the app:
 python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-Ask for a project by title or try “Find Wasalt apartments with 2 bedrooms
-up to SAR 1 million.” The search applies exact bedroom and currency filters
-and compares prices in the requested currency. “Under” is exclusive and
-“up to” includes the stated price. All source cards are marked as samples.
-
-To enable OpenRouter, set `$env:CHAT_MODE = "live"` before starting Uvicorn
-and use the key in the local `.env`. OpenRouter ranks the matching sample
-records. The server renders their facts and source cards from the snapshot.
+The default preview marks fixture sources as samples. For the reviewer demo,
+set `PROPERTY_DATA_MODE=live` and `CHAT_MODE=live` in the launch environment.
+OpenRouter ranks evidence with free Nemotron or Cohere models. The server
+renders facts, source dates, missing-data messages and citations from the
+snapshot. A fresh checkout can read the packaged snapshot directly.
 
 ## Import browser-saved pages
 
@@ -76,35 +80,42 @@ This mode returns source links from imported records. It uses local lookup,
 which can be verified independently of OpenRouter. Cross-check extracted
 fields against each saved page before relying on the snapshot.
 
+The [data collection log](docs/data-collection-log.md) documents the
+alternatives checked and how to reproduce the OMRAN AIDA record.
+See the [expanded corpus evaluation](evaluation/README.md) for the
+current live snapshot, retrieval trace, and reproduction commands.
+
 ## Docker and Render
 
-The image includes the validated sample snapshot in
-`deploy_data/property_pilot.jsonl` and uses the existing JSONL search and
-filters. It has two fixtures and zero real records. A read-only snapshot is
-enough for this pilot, so the service has no database or vector store.
+The image copies the validated real dataset from
+`deploy_data/property_live.jsonl`. Refresh this file from a verified local
+snapshot before rebuilding. A read-only JSONL snapshot serves the current
+corpus and filters without a database or vector store.
 The Docker command listens on `0.0.0.0` and uses `PORT`, defaulting to
 `10000`. The health endpoint returns HTTP 200 with `{"status":"ok"}`
 without calling OpenRouter or any other service.
 
-Build and run a keyless local smoke test from PowerShell:
+Build and run the Docker demo from PowerShell. The key is read into the
+current process environment and passed only at container runtime.
 
 ```powershell
 docker build -t darglobal-chatbot .
-docker run --rm --name darglobal-chatbot -e PORT=10000 -p 127.0.0.1:8004:10000 darglobal-chatbot
+$env:OPENROUTER_API_KEY = python -c "from dotenv import dotenv_values; print(dotenv_values('.env', interpolate=False)['OPENROUTER_API_KEY'])"
+docker run --rm --name darglobal-chatbot -e OPENROUTER_API_KEY -e PORT=10000 -p 127.0.0.1:8004:10000 darglobal-chatbot
 ```
 
-In another PowerShell terminal, check the health endpoint and a fixture query.
-Use the same commands after deployment with the assigned Render HTTPS base URL.
+In another terminal, run the health and fresh Chrome smoke checks. Install
+the optional browser dependency with `python -m pip install playwright==1.65.2`
+if needed. Use the assigned Render HTTPS base URL to repeat these checks
+after deployment.
 
 ```powershell
-$base = "http://127.0.0.1:8004"
-Invoke-RestMethod "$base/health"
-$body = @{ message = "Find Wasalt apartments with 2 bedrooms up to SAR 1 million." } | ConvertTo-Json
-Invoke-RestMethod "$base/api/chat" -Method Post -ContentType "application/json" -Body $body
+python -m smoke_demo http://127.0.0.1:8004
+python -m smoke_demo https://your-service.onrender.com
 ```
 
-The answer should include the Al Yasmin fixture at SAR 910,000 and a source
-marked as a fixture with no URL.
+The script verifies a project comparison and dated statuses, a Wasalt guide
+answer, working publisher citations, and an explicit missing price response.
 
 To deploy, push the assignment commit to `origin/dev` and sign in to Render.
 Connect this GitHub repository and deploy a **Free Docker Web Service** from
@@ -112,8 +123,25 @@ the `dev` branch using the root `Dockerfile`. The included `render.yaml`
 also defines these settings for a Render Blueprint. Set the health check
 path to `/health`. In the Render service's **Environment** settings, add
 `OPENROUTER_API_KEY` using the real key, set `CHAT_MODE=live`, and set
-`PROPERTY_DATA_MODE=fixture`. Keep the key out of the build and repository.
-Once Render assigns an HTTPS URL, run the two smoke checks above against it.
+`PROPERTY_DATA_MODE=live`. Keep the key out of the build and repository.
+Once Render assigns an HTTPS URL, run the browser smoke command against it.
+
+## Excel export and future storage
+
+From the project root, run `node export_corpus.mjs`. This uses the bundled
+spreadsheet runtime in the Codex cache. If it is installed elsewhere, set
+`CORPUS_ARTIFACT_NODE_MODULES` to its `node_modules` directory. The exporter
+uses the local validated snapshot when present and the packaged copy in a
+fresh checkout. It writes `exports/property_corpus.xlsx` and reopens it to
+verify the data in all three sheets. Stable record and source IDs join the
+project and guide rows to the Sources sheet, including the OMRAN supporting
+source for AIDA. Export dependencies stay outside the runtime image.
+
+`DATABASE_URL` is reserved for a future Supabase Postgres connection.
+`QDRANT_URL`, `QDRANT_API_KEY`, and `QDRANT_COLLECTION` are reserved for
+future vector search. All four settings can be empty for the current app.
+Postgres migration, Qdrant provisioning and embeddings are deferred. Keep
+future credentials in local or runtime settings.
 
 ## Keep-alive for the assignment review
 

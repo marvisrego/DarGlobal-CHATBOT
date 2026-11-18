@@ -10,6 +10,6 @@ services:
       - key: CHAT_MODE
         value: live
       - key: PROPERTY_DATA_MODE
-        value: fixture
+        value: live
       - key: OPENROUTER_API_KEY
         sync: false

@@ -1,0 +1,91 @@
+[
+  {
+    "id": "aida",
+    "top_five": [
+      "project:aida"
+    ],
+    "retrieval_pass": true
+  },
+  {
+    "id": "tierra",
+    "top_five": [
+      "project:tierra-viva"
+    ],
+    "retrieval_pass": true
+  },
+  {
+    "id": "astera",
+    "top_five": [],
+    "retrieval_pass": false
+  },
+  {
+    "id": "mulliner",
+    "top_five": [],
+    "retrieval_pass": false
+  },
+  {
+    "id": "compare",
+    "top_five": [
+      "project:tierra-viva"
+    ],
+    "retrieval_pass": false
+  },
+  {
+    "id": "dubai",
+    "top_five": [],
+    "retrieval_pass": false
+  },
+  {
+    "id": "saudi",
+    "top_five": [
+      "project:rayana"
+    ],
+    "retrieval_pass": true
+  },
+  {
+    "id": "buyer",
+    "top_five": [
+      "guide:buyer-cost"
+    ],
+    "retrieval_pass": false
+  },
+  {
+    "id": "ejar",
+    "top_five": [],
+    "retrieval_pass": false
+  },
+  {
+    "id": "commute",
+    "top_five": [],
+    "retrieval_pass": false
+  },
+  {
+    "id": "offplan",
+    "top_five": [],
+    "retrieval_pass": false
+  },
+  {
+    "id": "cross",
+    "top_five": [
+      "project:aida"
+    ],
+    "retrieval_pass": false
+  },
+  {
+    "id": "no-listing",
+    "top_five": [],
+    "retrieval_pass": true
+  },
+  {
+    "id": "no-price",
+    "top_five": [
+      "project:aida"
+    ],
+    "retrieval_pass": true
+  },
+  {
+    "id": "no-project",
+    "top_five": [],
+    "retrieval_pass": true
+  }
+]

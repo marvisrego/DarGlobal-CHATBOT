@@ -1,0 +1,473 @@
+{
+  "projects": [
+    {
+      "id": "aida",
+      "page": 24,
+      "title": "AIDA",
+      "location": "Muscat, Oman",
+      "property_type": "Villas and apartments",
+      "status": "Under construction",
+      "evidence": [
+        "villas and apartments"
+      ],
+      "aliases": [
+        "aida development"
+      ]
+    },
+    {
+      "id": "rayana",
+      "page": 16,
+      "title": "Rayana, Wadi Safar",
+      "location": "Riyadh, Saudi Arabia",
+      "property_type": "Private mansions",
+      "status": "Under construction",
+      "evidence": [
+        "private mansions"
+      ],
+      "aliases": [
+        "rayana",
+        "wadi safar"
+      ]
+    },
+    {
+      "id": "amaya",
+      "page": 17,
+      "title": "Amaya",
+      "location": "Jeddah, Saudi Arabia",
+      "property_type": "Development plots",
+      "status": "Under construction",
+      "evidence": [
+        "flexible plots"
+      ],
+      "aliases": [
+        "amaya"
+      ]
+    },
+    {
+      "id": "neptune",
+      "page": 19,
+      "title": "Neptune, Interiors by Mouawad",
+      "location": "Riyadh, Saudi Arabia",
+      "property_type": "Villas",
+      "status": "Under construction",
+      "evidence": [
+        "Neptune Villas",
+        "North of Riyadh"
+      ],
+      "aliases": [
+        "neptune",
+        "mouawad"
+      ]
+    },
+    {
+      "id": "dg1",
+      "page": 20,
+      "title": "DG1, Business Bay",
+      "location": "Dubai, UAE",
+      "property_type": "Residences",
+      "status": "Under construction",
+      "evidence": [
+        "collection of luxury",
+        "residences"
+      ],
+      "aliases": [
+        "dg1",
+        "business bay"
+      ]
+    },
+    {
+      "id": "urban-oasis",
+      "page": 22,
+      "title": "Urban Oasis Tower by Missoni",
+      "location": "Dubai, UAE",
+      "property_type": "Apartments and penthouses",
+      "status": "Completed",
+      "evidence": [
+        "penthouses",
+        "apartments"
+      ],
+      "aliases": [
+        "urban oasis",
+        "missoni"
+      ]
+    },
+    {
+      "id": "da-vinci",
+      "page": 22,
+      "title": "Da Vinci Tower, Interiors by Pagani",
+      "location": "Dubai, UAE",
+      "property_type": "Residences",
+      "status": "Completed",
+      "evidence": [
+        "residences by Pagani"
+      ],
+      "aliases": [
+        "da vinci tower",
+        "da vinci",
+        "pagani"
+      ]
+    },
+    {
+      "id": "astera",
+      "page": 23,
+      "title": "The Astera, Interiors by Aston Martin",
+      "location": "Ras Al Khaimah, UAE",
+      "property_type": "Beachfront residences",
+      "status": "Under construction",
+      "evidence": [
+        "beachfront residences",
+        "Al Marjan Island"
+      ],
+      "aliases": [
+        "the astera",
+        "astera",
+        "aston martin",
+        "al marjan island"
+      ]
+    },
+    {
+      "id": "les-vagues",
+      "page": 25,
+      "title": "Les Vagues by Elie Saab",
+      "location": "Lusail, Qatar",
+      "property_type": "Apartments and retail units",
+      "status": "Under construction",
+      "evidence": [
+        "Lusail",
+        "apartments & retail units"
+      ],
+      "aliases": [
+        "les vagues",
+        "elie saab",
+        "qetaifan island"
+      ]
+    },
+    {
+      "id": "tierra-viva",
+      "page": 26,
+      "title": "Tierra Viva",
+      "location": "Benahavís, Spain",
+      "property_type": "Villas",
+      "status": "Under construction",
+      "evidence": [
+        "Benahavís",
+        "number of villas"
+      ],
+      "aliases": [
+        "tierra viva",
+        "lamborghini"
+      ]
+    },
+    {
+      "id": "mulliner",
+      "page": 27,
+      "title": "The Mulliner",
+      "location": "London, UK",
+      "property_type": null,
+      "status": "Completed",
+      "evidence": [
+        "Old Park Lane"
+      ],
+      "aliases": [
+        "the mulliner",
+        "mulliner",
+        "old park lane",
+        "piccadilly"
+      ]
+    }
+  ],
+  "guides": [
+    {
+      "key": "buyer",
+      "url": "https://blog.wasalt.sa/en/how-to-buy-a-house-in-saudi-arabia/",
+      "title": "Wasalt first-time buyer guide",
+      "sections": [
+        {
+          "id": "buyer-cost",
+          "section": "Step 3: Set a Realistic Budget",
+          "evidence": [
+            "maintenance fees",
+            "service charges"
+          ],
+          "points": [
+            "Include recurring maintenance and building service charges in the purchase budget."
+          ],
+          "aliases": [
+            "total cost",
+            "running costs",
+            "ongoing fees",
+            "maintenance costs",
+            "buyer budget"
+          ]
+        },
+        {
+          "id": "buyer-checks",
+          "section": "Step 6: Conduct Proper Due Diligence",
+          "evidence": [
+            "confirm title deed",
+            "building permits",
+            "completion certificates"
+          ],
+          "points": [
+            "Verify the title deed and property ownership before committing.",
+            "Request the building permit and completion certificate."
+          ],
+          "aliases": [
+            "title deed",
+            "building permit",
+            "completion certificate",
+            "before making an offer",
+            "buyer guide",
+            "first time buyer",
+            "due diligence"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "ejar",
+      "url": "https://blog.wasalt.sa/en/ejar-system-saudi-arabia-2026-guide/",
+      "title": "Wasalt Ejar guide",
+      "sections": [
+        {
+          "id": "ejar-overview",
+          "section": "What is the Ejar System?",
+          "evidence": [
+            "rental process",
+            "renters and landlords"
+          ],
+          "points": [
+            "Ejar is a Saudi system for managing rental contracts and the rental process."
+          ],
+          "aliases": [
+            "ejar",
+            "tenancy system",
+            "rental registration"
+          ]
+        },
+        {
+          "id": "ejar-process",
+          "section": "How the Rental Process Works",
+          "evidence": [
+            "contract registration through ejar",
+            "payment of rent installments"
+          ],
+          "points": [
+            "The guide's sequence is to agree the rent, register the contract in Ejar, then pay in installments."
+          ],
+          "aliases": [
+            "lease registration",
+            "register the lease",
+            "rent installments",
+            "rental contract",
+            "ejar process"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "expat",
+      "url": "https://blog.wasalt.sa/en/ultimate-guide-for-expat-housing-in-riyadh/",
+      "title": "Wasalt expat rental guide",
+      "sections": [
+        {
+          "id": "expat-housing",
+          "section": "Compound vs Apartment Living",
+          "evidence": [
+            "pools, gyms, security",
+            "apartments for rent in riyadh"
+          ],
+          "points": [
+            "The guide contrasts compound amenities such as pools, gyms, and security with ordinary apartments."
+          ],
+          "aliases": [
+            "compound",
+            "compounds",
+            "expat housing",
+            "apartment living"
+          ]
+        },
+        {
+          "id": "expat-commute",
+          "section": "Choose Location Based on Commute",
+          "evidence": [
+            "dry run",
+            "commute",
+            "before signing"
+          ],
+          "points": [
+            "Try the commute from the prospective home to work before signing a lease."
+          ],
+          "aliases": [
+            "commute",
+            "travel to work",
+            "journey to work",
+            "test the journey",
+            "expat renting"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "districts",
+      "url": "https://blog.wasalt.sa/en/areas-to-buy-property-in-riyadh-2026/",
+      "title": "Wasalt Riyadh district guide",
+      "sections": [
+        {
+          "id": "districts-north",
+          "section": "Promising Areas to Buy Property in Riyadh",
+          "evidence": [
+            "al narjis",
+            "al yasmin",
+            "al aqi",
+            "al malqa"
+          ],
+          "points": [
+            "The guide names Al Narjis, Al Yasmin, Al Aqiq and Al Malqa as North Riyadh districts to explore."
+          ],
+          "aliases": [
+            "north riyadh",
+            "riyadh districts",
+            "riyadh neighborhoods",
+            "riyadh neighbourhoods"
+          ]
+        },
+        {
+          "id": "districts-transit",
+          "section": "How To Choose Areas to Buy Property in Riyadh",
+          "evidence": [
+            "metro stops",
+            "office"
+          ],
+          "points": [
+            "Factor metro access to work into a neighborhood shortlist."
+          ],
+          "aliases": [
+            "metro access",
+            "district transit",
+            "neighborhood shortlist"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "offplan",
+      "url": "https://blog.wasalt.sa/en/off-plan-properties-in-2025/",
+      "title": "Wasalt off-plan guide",
+      "sections": [
+        {
+          "id": "offplan-payment",
+          "section": "5. Flexibility and Financial Accessibility",
+          "evidence": [
+            "spread costs over the construction period"
+          ],
+          "points": [
+            "The guide describes staged payments during construction as an option to check with the developer."
+          ],
+          "aliases": [
+            "off plan payments",
+            "staged payments",
+            "installments during construction"
+          ]
+        },
+        {
+          "id": "offplan-risk",
+          "section": "Are off-plan properties risky investments?",
+          "evidence": [
+            "track record",
+            "location"
+          ],
+          "points": [
+            "Check the developer's track record and the project location when assessing off-plan risk."
+          ],
+          "aliases": [
+            "off plan risk",
+            "developer track record",
+            "before construction",
+            "off plan"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "remote",
+      "url": "https://blog.wasalt.sa/en/global-living/",
+      "title": "Wasalt remote property management guide",
+      "sections": [
+        {
+          "id": "remote-services",
+          "section": "2. Enhancing Comfort Through Concierge and Property Management Services",
+          "evidence": [
+            "maintenance",
+            "cleaning",
+            "security"
+          ],
+          "points": [
+            "The guide describes property managers coordinating maintenance, cleaning, and security while owners are away."
+          ],
+          "aliases": [
+            "manage property remotely",
+            "owner is away",
+            "maintenance cleaning security",
+            "remote property management"
+          ]
+        },
+        {
+          "id": "remote-tools",
+          "section": "5. Staying Organized with Digital Solutions",
+          "evidence": [
+            "scheduling maintenance",
+            "service requests"
+          ],
+          "points": [
+            "The guide suggests using digital tools to track maintenance and service requests for a remote home."
+          ],
+          "aliases": [
+            "maintenance scheduling",
+            "remote home apps",
+            "service requests"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "park",
+      "url": "https://blog.wasalt.sa/en/king-salman-park-riyadh/",
+      "title": "Wasalt King Salman Park guide",
+      "sections": [
+        {
+          "id": "park-features",
+          "section": "Core Features of King Salman Park Riyadh",
+          "evidence": [
+            "royal arts complex",
+            "circular pedestrian walkway"
+          ],
+          "points": [
+            "The guide describes a planned Royal Arts Complex and a circular pedestrian walkway."
+          ],
+          "aliases": [
+            "king salman park",
+            "royal arts complex",
+            "park features"
+          ]
+        },
+        {
+          "id": "park-walkability",
+          "section": "Beyond Speculation: Real Quality-of-Life Factors",
+          "evidence": [
+            "pedestrian networks",
+            "green space"
+          ],
+          "points": [
+            "The guide highlights pedestrian routes and green space as quality-of-life features."
+          ],
+          "aliases": [
+            "park walkability",
+            "pedestrian routes",
+            "park green space"
+          ]
+        }
+      ]
+    }
+  ]
+}
