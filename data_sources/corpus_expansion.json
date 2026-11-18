@@ -1,0 +1,270 @@
+{
+  "projects": [
+    {
+      "url": "https://darglobal.co.uk/press/dar-global-expands-saudi-arabia-portfolio-with-new-jeddah-development-valued-at-sar-1-billion",
+      "id": "jeddah-november-2026",
+      "title": "Dar Global's November Jeddah Development",
+      "section": "Dar Global Expands Saudi Arabia Portfolio with New Jeddah Development Valued at SAR 1 Billion",
+      "source_as_of": "2026-11-16",
+      "status": "Announced",
+      "property_type": "Planned mixed-use development",
+      "development_value": "Estimated gross development value at announcement: approximately SAR 1 billion (USD 267 million).",
+      "details": [
+        "Dar Global said the development would introduce an international luxury brand through a co-branded residential concept.",
+        "The announcement deferred the residential details and launch date."
+      ],
+      "aliases": [
+        "november jeddah development",
+        "new jeddah development",
+        "jeddah november 2026 development",
+        "sar 1 billion development in jeddah"
+      ],
+      "evidence": [
+        "16/11/2026",
+        "gross development value",
+        "sar 1 billion",
+        "usd 267 million",
+        "co-branded residential concept",
+        "official launch date"
+      ]
+    },
+    {
+      "url": "https://darglobal.co.uk/press/dar-global-trump-organization-usd-1bn-trump-plaza-jeddah",
+      "id": "trump-plaza-jeddah",
+      "title": "Trump Plaza Jeddah",
+      "section": "DarGlobal and The Trump Organisation Expand Saudi Portfolio With Usd 1BN Trump Plaza Jeddah",
+      "source_as_of": "2026-01-12",
+      "status": "Launched",
+      "property_type": "Mixed-use district with residences, offices, retail and dining",
+      "development_value": "Development value reported at launch: over USD 1 billion.",
+      "details": [
+        "Trump Plaza Jeddah is part of the Amaya development along King Abdulaziz Road.",
+        "The launch announcement lists 1–3-bedroom Executive Residences, 2–4-bedroom Park Residences and four-bedroom townhouses."
+      ],
+      "aliases": [
+        "trump plaza",
+        "trump plaza jeddah",
+        "trump executive residences",
+        "trump park residences",
+        "trump townhouses"
+      ],
+      "evidence": [
+        "12/01/2026",
+        "valued at over usd 1 billion",
+        "within the expansive amaya development",
+        "grade-a offices",
+        "1, 2, and 3-bedroom",
+        "2, 3, and 4-bedroom",
+        "4-bedroom trump townhouses"
+      ]
+    },
+    {
+      "url": "https://darglobal.co.uk/amaya/padel-living",
+      "id": "padel-living",
+      "title": "Padel Living Residences",
+      "section": "Rooftop Padel. Reserved For Residents.",
+      "property_type": "Residences",
+      "details": [
+        "Padel Living Residences is on King Abdulaziz Road in Jeddah.",
+        "Its rooftop padel courts are reserved for residents, with 24/7 access through a dedicated booking app."
+      ],
+      "aliases": [
+        "padel living",
+        "padel living residences",
+        "rooftop padel courts"
+      ],
+      "evidence": [
+        "padel living residences",
+        "king abdulaziz road",
+        "rooftop padel. reserved for residents.",
+        "24/7",
+        "dedicated booking app"
+      ]
+    }
+  ],
+  "guides": [
+    {
+      "url": "https://blog.wasalt.sa/en/best-neighborhoods-to-live-in-jeddah/",
+      "title": "Wasalt Jeddah neighborhood guide",
+      "source_as_of": "2024-03-04",
+      "sections": [
+        {
+          "id": "jeddah-neighborhoods",
+          "section": "The most exciting neighborhoods of Jeddah",
+          "evidence": [
+            "Al Shati",
+            "waterfront",
+            "Al Zahraa",
+            "healthcare",
+            "Al Rawdha",
+            "Al Naeem"
+          ],
+          "points": [
+            "Wasalt describes Al Shati as a waterfront neighborhood.",
+            "Wasalt highlights Al Zahraa for nearby healthcare, schools and malls.",
+            "Wasalt describes Al Rawdha as a lively area with luxury villas and mentions land plots in Al Naeem."
+          ],
+          "aliases": [
+            "jeddah neighborhoods",
+            "jeddah neighbourhoods",
+            "jeddah waterfront",
+            "waterfront in jeddah",
+            "al zahraa",
+            "al rawdha",
+            "al naeem"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://blog.wasalt.sa/en/exploring-the-best-10-dammam-districts/",
+      "title": "Wasalt Dammam district guide",
+      "source_as_of": "2025-10-14",
+      "sections": [
+        {
+          "id": "dammam-shati",
+          "section": "1. Al Shati District",
+          "evidence": [
+            "Corniche",
+            "coastal Dammam"
+          ],
+          "points": [
+            "Wasalt describes Dammam’s Al Shati as a coastal district near the Corniche."
+          ],
+          "aliases": [
+            "dammam al shati",
+            "al shati in dammam",
+            "dammam corniche",
+            "dammam waterfront"
+          ]
+        },
+        {
+          "id": "dammam-faisaliah",
+          "section": "2. Al Faisaliah District",
+          "evidence": [
+            "business hubs",
+            "schools",
+            "hospitals"
+          ],
+          "points": [
+            "Wasalt describes Al Faisaliah as central, with access to business hubs, schools and hospitals."
+          ],
+          "aliases": [
+            "al faisaliah",
+            "central dammam",
+            "dammam business hubs"
+          ]
+        },
+        {
+          "id": "dammam-badiyah",
+          "section": "3. Al Badiyah District",
+          "evidence": [
+            "residential",
+            "slower pace"
+          ],
+          "points": [
+            "Wasalt describes Al Badiyah as a quieter residential district with a slower pace."
+          ],
+          "aliases": [
+            "al badiyah",
+            "quiet district in dammam",
+            "quiet residential area in dammam"
+          ]
+        },
+        {
+          "id": "dammam-rakah",
+          "section": "4. Al Rakah District",
+          "evidence": [
+            "Dhahran",
+            "Al Khobar",
+            "commute between cities"
+          ],
+          "points": [
+            "Wasalt says Al Rakah borders Dhahran and has access to Dammam and Al Khobar, making it an option to explore for intercity commutes."
+          ],
+          "aliases": [
+            "al rakah",
+            "dammam and al khobar",
+            "commuting between dammam and al khobar"
+          ]
+        },
+        {
+          "id": "dammam-manar",
+          "section": "6. Al Manar District",
+          "evidence": [
+            "wide roads",
+            "shopping centers"
+          ],
+          "points": [
+            "Wasalt describes Al Manar as a district with wide roads and shopping centers nearby."
+          ],
+          "aliases": [
+            "al manar",
+            "shopping centers in dammam",
+            "dammam shopping district"
+          ]
+        },
+        {
+          "id": "dammam-adamah",
+          "section": "7. Al Adamah District",
+          "evidence": [
+            "oldest",
+            "market"
+          ],
+          "points": [
+            "Wasalt describes Al Adamah as an older district with traditional market activity."
+          ],
+          "aliases": [
+            "al adamah",
+            "traditional markets in dammam",
+            "historic district in dammam"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://blog.wasalt.sa/en/ejar-system-saudi-arabia-2026-guide/",
+      "title": "Wasalt Ejar guide",
+      "source_as_of": "2026-03-30",
+      "sections": [
+        {
+          "id": "ejar-address",
+          "section": "What is the Ejar System?",
+          "evidence": [
+            "update your national address",
+            "broker initiates the contract",
+            "validation error"
+          ],
+          "points": [
+            "Wasalt recommends updating the national address before the broker initiates the Ejar contract to avoid a registration validation error."
+          ],
+          "aliases": [
+            "national address",
+            "address before registration",
+            "ejar address",
+            "address does not match"
+          ]
+        },
+        {
+          "id": "ejar-payment-proof",
+          "section": "Key Benefits of Ejar",
+          "evidence": [
+            "Mada or SADAD",
+            "confirms payment"
+          ],
+          "points": [
+            "Wasalt says electronic payment through a channel such as Mada or SADAD provides a digital record that confirms rent payment."
+          ],
+          "aliases": [
+            "mada",
+            "sadad",
+            "payment proof",
+            "proof of rent payment",
+            "digital payment record",
+            "rent receipt"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -7,14 +7,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from answers import (
-    DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL,
+    DAR_REPORT_CITATION, DAR_REPORT_METHOD, DAR_REPORT_URL, DAR_WEB_METHOD,
     OMRAN_AIDA_METHOD, OMRAN_AIDA_URL, WASALT_GUIDE_METHOD, Evidence, Source,
 )
+from corpus_snapshot import live_snapshot
 
 SNAPSHOT = Path(__file__).resolve().parent / "snapshots" / "property_pilot.jsonl"
-LIVE_SNAPSHOT = SNAPSHOT.with_name("property_live.jsonl")
-if not LIVE_SNAPSHOT.is_file():
-    LIVE_SNAPSHOT = SNAPSHOT.parent.parent / "deploy_data" / "property_live.jsonl"
+LIVE_SNAPSHOT = live_snapshot("v1")
 CURRENCIES = r"SAR|USD|AED|GBP|EUR|OMR|QAR|KWD|BHD|CAD|AUD|INR|JPY"
 CAP = r"(\b(?:under|below|less than|up to|at most|no more than|max(?:imum)?(?: price)?)\b|<=|<)"
 BUDGET = re.compile(
@@ -127,7 +126,7 @@ def matches_listing(record, filters):
     return price < amount if strict else price <= amount
 
 
-def record_fields(record):
+def record_fields(record, *, include_development_value=True):
     fields = [record["title"], record.get("location")]
     if record["record_type"] == "project":
         if record.get("property_type"):
@@ -137,6 +136,9 @@ def record_fields(record):
             fields.append(f"Status: {record['status']}{as_of}")
         if record.get("amenities"):
             fields.append(f"Amenities: {', '.join(record['amenities'])}")
+        if include_development_value and record.get("development_value"):
+            fields.append(record["development_value"])
+        fields.extend(record.get("details", []))
     else:
         if record.get("price") is not None:
             price = f"{Decimal(str(record['price'])):,f}"
@@ -150,14 +152,14 @@ def record_fields(record):
     return list(filter(None, fields))
 
 
-def record_fact(record):
-    return "\n".join(record_fields(record))
+def record_fact(record, *, include_development_value=True):
+    return "\n".join(record_fields(record, include_development_value=include_development_value))
 
 
 def answer_evidence(record):
     is_guide = record["record_type"] == "buyer_guide"
     return Evidence(
-        record.get("section") or record["title"], record.get("publisher") or record["source"],
+        record["section"] if is_guide else record["title"], record.get("publisher") or record["source"],
         tuple(record["points"] if is_guide else record_fields(record)[1:] or [record["title"]]),
         is_guide,
     )
@@ -377,11 +379,12 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
     guide_selected = any(row["record_type"] == "buyer_guide" for row in chosen)
     if guide_selected:
         notes.append("Source: Wasalt.sa for the guide notes.")
+    include_development_value = not abstain or "gdv" in terms or includes(query, "development value")
     return SearchResult(
         message=" ".join(["Based on the cited sources.", *notes]),
         facts=[
             f"{row['section']}: {' '.join(row['points'])}" if row["record_type"] == "buyer_guide"
-            else record_fact(row) for row in chosen
+            else record_fact(row, include_development_value=include_development_value) for row in chosen
         ],
         sources=[
             Source(title=row.get("section") or row["title"], publisher=row.get("publisher") or row["source"],
@@ -401,13 +404,16 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
     )
 
 
-def search(message, snapshot=None, *, live_data=False, vector_lookup=None, rerank=None):
+def search(message, snapshot=None, *, live_data=False, vector_lookup=None, rerank=None, record_loader=None):
     snapshot = (LIVE_SNAPSHOT if live_data else SNAPSHOT) if snapshot is None else snapshot
     description = "real property" if live_data else "sample property"
-    if not snapshot.is_file():
-        return SearchResult(f"The {description} snapshot is unavailable.")
-    with snapshot.open(encoding="utf-8") as infile:
-        records = [json.loads(line) for line in infile if line.strip()]
+    if record_loader is None:
+        if not snapshot.is_file():
+            return SearchResult(f"The {description} snapshot is unavailable.")
+        with snapshot.open(encoding="utf-8") as infile:
+            records = [json.loads(line) for line in infile if line.strip()]
+    else:
+        records = record_loader()
     mode = "live" if live_data else "synthetic_fixture"
     selected = [record for record in records if record.get("mode") == mode and record.get("title")]
     if live_data:
@@ -483,6 +489,15 @@ def search(message, snapshot=None, *, live_data=False, vector_lookup=None, reran
 
 
 def valid_citation(record):
+    if record.get("collection_method") == DAR_WEB_METHOD:
+        url = urlsplit(record.get("canonical_url") or "")
+        return (
+            record.get("source") == "DarGlobal" and record.get("publisher") == "Dar Global PLC"
+            and record.get("record_type") == "project" and record.get("source_url") == record.get("canonical_url")
+            and url.scheme == "https" and url.netloc == "darglobal.co.uk" and not url.query and not url.fragment
+            and (url.path.startswith("/press/") or url.path == "/amaya/padel-living")
+            and bool(record.get("section"))
+        )
     if record.get("collection_method") == DAR_REPORT_METHOD:
         page = record.get("source_page")
         return (

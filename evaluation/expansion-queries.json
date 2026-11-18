@@ -1,0 +1,28 @@
+[
+  {
+    "id": "jeddah-project-disambiguation",
+    "question": "Compare Trump Plaza Jeddah and the November Jeddah development by their stated development values.",
+    "expected": ["project:trump-plaza-jeddah", "project:jeddah-november-2026"],
+    "facts": ["over USD 1 billion", "approximately SAR 1 billion"]
+  },
+  {
+    "id": "dammam-quiet-paraphrase",
+    "question": "I’d rather live somewhere calm. Which quiet district in Dammam does Wasalt describe as having a slower pace?",
+    "expected": ["guide:dammam-badiyah"],
+    "facts": ["Al Badiyah", "slower pace"]
+  },
+  {
+    "id": "padel-wasalt-cross",
+    "question": "Who can book Padel Living’s rooftop courts, and separately, what does Wasalt’s Jeddah neighborhoods guide say about Al Shati?",
+    "expected": ["project:padel-living", "guide:jeddah-neighborhoods"],
+    "facts": ["reserved for residents", "waterfront"]
+  },
+  {
+    "id": "jeddah-missing-unit-price",
+    "question": "What is the current unit asking price at Trump Plaza Jeddah?",
+    "expected": ["project:trump-plaza-jeddah"],
+    "facts": ["no verified asking price"],
+    "forbidden": ["USD 1 billion"],
+    "answer_path": "abstention"
+  }
+]

@@ -7,8 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 ARG PROPERTY_RETRIEVAL_MODE=jsonl
+ARG PROPERTY_CORPUS_BACKEND=jsonl
 ENV HF_HOME=/opt/huggingface
 COPY requirements.txt requirements-qdrant.txt requirements-vector-store.txt property_vectors.py ./
+COPY requirements-import.txt ./
 RUN if [ "$PROPERTY_RETRIEVAL_MODE" = "hybrid" ]; then \
         pip install --no-cache-dir -r requirements-qdrant.txt && \
         python -c 'from property_vectors import Embedder; Embedder()' && \
@@ -18,10 +20,14 @@ RUN if [ "$PROPERTY_RETRIEVAL_MODE" = "hybrid" ]; then \
     else \
         pip install --no-cache-dir -r requirements.txt; \
     fi
+RUN if [ "$PROPERTY_CORPUS_BACKEND" = "postgres" ]; then \
+        pip install --no-cache-dir -r requirements-import.txt; \
+    fi
 
-COPY main.py answers.py openrouter_provider.py property_search.py hybrid_retrieval.py nvidia_api.py ./
+COPY main.py answers.py corpus_snapshot.py corpus_postgres.py openrouter_provider.py property_search.py hybrid_retrieval.py nvidia_api.py ./
 COPY static/ ./static/
 COPY deploy_data/property_live.jsonl ./snapshots/property_live.jsonl
+COPY deploy_data/property_live_v2.jsonl ./snapshots/property_live_v2.jsonl
 
 USER 10001:10001
 EXPOSE 10000

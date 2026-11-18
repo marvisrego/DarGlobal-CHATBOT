@@ -10,7 +10,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from property_search import LIVE_SNAPSHOT, search
+from corpus_snapshot import RELEASES, live_snapshot
+from property_search import search
 
 ROOT = Path(__file__).resolve().parent
 LIVE_GUIDE_CASE = {
@@ -71,6 +72,8 @@ def main():
     retrieval.add_argument("--hybrid", action="store_true", help="Use MiniLM Qdrant retrieval and include recovery cases")
     retrieval.add_argument("--nvidia", action="store_true", help="Use hosted NVIDIA retrieval and include recovery cases")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--corpus-version", choices=RELEASES, default="v1")
+    parser.add_argument("--corpus-backend", choices=("jsonl", "postgres"), default="jsonl")
     args = parser.parse_args()
     if args.benchmark:
         benchmark_embeddings()
@@ -79,6 +82,8 @@ def main():
         CHAT_MODE="live" if args.live else "mock", PROPERTY_DATA_MODE="live",
         PROPERTY_RETRIEVAL_MODE="nvidia" if args.nvidia else "hybrid" if args.hybrid else "jsonl",
         CHAT_PROVIDER="nvidia" if args.nvidia else "openrouter",
+        PROPERTY_CORPUS_VERSION=args.corpus_version,
+        PROPERTY_CORPUS_BACKEND=args.corpus_backend,
     )
     from main import app
 
@@ -93,9 +98,12 @@ def main():
             questions += additional + new
     elif args.live:
         questions = [next(item for item in questions if item["id"] == "compare"), LIVE_GUIDE_CASE]
+    if args.corpus_version == "v2":
+        additions = json.loads((ROOT / "evaluation/expansion-queries.json").read_text(encoding="utf-8"))
+        questions = additions if args.live else questions + additions
     records = {
         row["record_id"]: row
-        for line in LIVE_SNAPSHOT.read_text(encoding="utf-8").splitlines()
+        for line in live_snapshot(args.corpus_version).read_text(encoding="utf-8").splitlines()
         if (row := json.loads(line)).get("record_id")
     }
     results = []
@@ -131,8 +139,10 @@ def main():
             )
             fact_pass = response.is_success and all(
                 normalized_fact(fact) in normalized_fact(answer) for fact in item["facts"]
-            )
-            if args.live:
+            ) and not any(normalized_fact(fact) in normalized_fact(answer) for fact in item.get("forbidden", []))
+            if item.get("answer_path"):
+                fact_pass = fact_pass and payload.get("answer_path") == item["answer_path"]
+            elif args.live:
                 fact_pass = fact_pass and bool(payload.get("inference_model"))
             results.append({
                 "id": item["id"], "top_five": top_five, "retrieval_pass": retrieval_pass,

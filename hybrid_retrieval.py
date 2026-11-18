@@ -13,7 +13,7 @@ RETRY_AFTER_SECONDS = 30
 
 class HybridLookup:
     def __init__(self, *, collection=COLLECTION, limit=5, embedder=None, vector_config=None,
-                 cooldown=RETRY_AFTER_SECONDS):
+                 cooldown=RETRY_AFTER_SECONDS, structured_backend="JSONL"):
         self._lock = Lock()
         self._retry_at = 0
         self._client = None
@@ -22,6 +22,7 @@ class HybridLookup:
         self._limit = limit
         self._vector_config = vector_config or {}
         self._cooldown = cooldown
+        self._structured_backend = structured_backend
 
     def _initialize(self):
         from qdrant_client import QdrantClient
@@ -76,8 +77,8 @@ class HybridLookup:
                 if monotonic() >= self._retry_at:
                     self._retry_at = monotonic() + self._cooldown
                     # Exception messages may contain URLs, headers, or response bodies.
-                    LOGGER.warning("Hybrid retrieval unavailable at %s (%s); using JSONL retrieval.",
-                                   stage, type(error).__name__)
+                    LOGGER.warning("Hybrid retrieval unavailable at %s (%s); using %s retrieval.",
+                                   stage, type(error).__name__, self._structured_backend)
             return None
 
     def close(self):
