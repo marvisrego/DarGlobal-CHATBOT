@@ -24,7 +24,7 @@ RUN if [ "$PROPERTY_CORPUS_BACKEND" = "postgres" ]; then \
         pip install --no-cache-dir -r requirements-import.txt; \
     fi
 
-COPY main.py answers.py corpus_snapshot.py corpus_postgres.py openrouter_provider.py property_search.py hybrid_retrieval.py nvidia_api.py ./
+COPY main.py answers.py corpus_snapshot.py corpus_postgres.py openrouter_provider.py property_search.py hybrid_retrieval.py nvidia_api.py listing_pilot.py listing_store.py ./
 COPY static/ ./static/
 COPY deploy_data/property_live.jsonl ./snapshots/property_live.jsonl
 COPY deploy_data/property_live_v2.jsonl ./snapshots/property_live_v2.jsonl

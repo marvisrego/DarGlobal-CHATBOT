@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from answers import ChatReply
 from corpus_snapshot import RELEASES, CorpusUnavailable, live_snapshot
+from listing_pilot import listing_intent
 import nvidia_api
 from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
 from property_search import search
@@ -47,6 +48,7 @@ CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "openrouter").strip().lower()
 if CHAT_PROVIDER not in {"openrouter", "nvidia"}:
     raise RuntimeError("CHAT_PROVIDER must be openrouter or nvidia.")
 DEPLOY_COMMIT = os.getenv("RENDER_GIT_COMMIT", "")
+LISTING_RELEASE = os.getenv("PROPERTY_LISTING_RELEASE", "").strip()
 
 
 def required_setting(name):
@@ -89,6 +91,14 @@ if CHAT_MODE == "live":
     else:
         answer_provider = OpenRouterAnswerProvider(required_setting("OPENROUTER_API_KEY"))
 
+listing_search = None
+if LISTING_RELEASE:
+    if postgres_corpus is None or nvidia_retrieval is None:
+        raise RuntimeError("PROPERTY_LISTING_RELEASE requires live data, Postgres and NVIDIA retrieval.")
+    from listing_store import PostgresListings
+
+    listing_search = PostgresListings(required_setting("DATABASE_URL"), LISTING_RELEASE, nvidia_retrieval)
+
 
 @asynccontextmanager
 async def lifespan(_app):
@@ -112,6 +122,8 @@ async def health(response: Response):
     response.headers["X-Retrieval-Mode"] = RETRIEVAL_MODE if vector_lookup is not None else "jsonl"
     response.headers["X-Corpus-Version"] = CORPUS_VERSION if DATA_MODE == "live" else "fixture"
     response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
+    if listing_search is not None:
+        response.headers["X-Listing-Release"] = LISTING_RELEASE
     return {"status": "ok"}
 
 
@@ -152,10 +164,14 @@ async def chat(
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
     try:
-        result = await run_in_threadpool(
-            search, request.message, snapshot=corpus_file, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
-            rerank=nvidia_retrieval.rerank if nvidia_retrieval is not None else None, record_loader=postgres_corpus,
-        )
+        if listing_search is not None and listing_intent(request.message):
+            response.headers["X-Listing-Release"] = LISTING_RELEASE
+            result = await run_in_threadpool(listing_search, request.message)
+        else:
+            result = await run_in_threadpool(
+                search, request.message, snapshot=corpus_file, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
+                rerank=nvidia_retrieval.rerank if nvidia_retrieval is not None else None, record_loader=postgres_corpus,
+            )
     except CorpusUnavailable as error:
         LOGGER.warning("chat request_id=%s corpus_backend=postgres error_category=%s", request_id, error.category)
         raise HTTPException(

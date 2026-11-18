@@ -133,8 +133,7 @@ def verify(client, name, payloads):
             print(f"Verified citation metadata for {payload['record_id']} ({payload['publisher']}).")
 
 
-def hosted_passage_vectors(embedder, snapshot, payloads):
-    digest = snapshot_digest(snapshot)
+def hosted_passage_vectors(embedder, digest, payloads):
     path = ROOT / "exports" / f"nvidia-passage-vectors-{digest}.json"
     vectors = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     if not isinstance(vectors, dict) or any(
@@ -257,7 +256,7 @@ def main():
         stage = "passage embedding"
         vectors = None
         if args.dry_run or (args.nvidia and not args.evaluate):
-            vectors = (hosted_passage_vectors(embedder, snapshot, payloads) if args.nvidia
+            vectors = (hosted_passage_vectors(embedder, snapshot_digest(snapshot), payloads) if args.nvidia
                        else embedder.encode([payload["text"] for payload in payloads.values()]))
             print(f"Verified {len(vectors)} passage vectors with {len(vectors[0])} dimensions.")
         if args.dry_run:
