@@ -41,8 +41,10 @@ The new retrieval matches verified project aliases and uses location and
 reported status for project group queries. It ranks guide sections by
 specific query phrases and keeps weak secondary candidates in the trace
 without citing them in the answer. Listing filters still operate on listing
-records only. The model can order selected evidence but the server renders
-the stored facts, missing-data messages, comparison summaries and citations.
+records only. The original demo used the model to order selected evidence.
+The current live route displays the model's grounded answer on success and
+attaches canonical citations from retrieval. If generation fails it displays
+a labeled source summary. Missing asking prices use a deterministic abstention.
 
 ## Results
 

@@ -44,7 +44,7 @@ class HybridLookup:
 
             with self._lock:
                 if monotonic() < self._retry_at:
-                    return []
+                    return None
                 if self._client is None:
                     self._initialize()
                 client = self._client
@@ -63,7 +63,7 @@ class HybridLookup:
                     self._retry_at = monotonic() + RETRY_AFTER_SECONDS
                     # Exception messages may contain URLs, headers, or response bodies.
                     LOGGER.warning("Hybrid retrieval unavailable (%s); using JSONL retrieval.", type(error).__name__)
-            return []
+            return None
 
     def close(self):
         if self._client is not None:

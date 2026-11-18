@@ -53,6 +53,8 @@ class SearchResult:
     passage_ids: list[str] = field(default_factory=list)
     supporting_sources: list[Source] = field(default_factory=list)
     has_guide: bool = False
+    abstain: bool = False
+    retrieval_path: str = "jsonl"
 
 
 def normalized(text):
@@ -173,19 +175,21 @@ def project_name_evidence(query, record):
 
 def recover_corpus_match(message, query, records, vector_lookup, *, guides, project_ids):
     if not guides and not project_ids:
-        return None
+        return None, "jsonl"
     semantic_query = message
     if guides and any(includes(query, term) for term in ("rush hour", "peak traffic", "trial drive")):
         semantic_query += " test the commute to work before signing a lease"
     hits = vector_lookup(semantic_query)
+    if hits is None:
+        return None, "jsonl_after_qdrant_failure"
     by_id = {row["record_id"]: row for row in records if row.get("record_id")}
     for key, score in hits:
         if key in project_ids and score >= PROJECT_SCORE_FLOOR:
-            return by_id[key]
+            return by_id[key], "qdrant"
     for key, score in hits:
         if guides and score >= GUIDE_SCORE_FLOOR and by_id.get(key, {}).get("record_type") == "buyer_guide":
-            return by_id[key]
-    return None
+            return by_id[key], "qdrant"
+    return None, "jsonl"
 
 
 def corpus_search(message, records, *, vector_lookup=None):
@@ -233,6 +237,8 @@ def corpus_search(message, records, *, vector_lookup=None):
     guide_candidates.sort(key=lambda match: (-match[0], match[1]))
     matched_listings = []
     notes = []
+    retrieval_path = "jsonl"
+    abstain = False
     if listing_intent:
         try:
             filters = listing_filters(message)
@@ -261,23 +267,34 @@ def corpus_search(message, records, *, vector_lookup=None):
         guide_intent = wants_wasalt or (
             not project_intent and not possible_names and not implicit_listing and bool(GUIDE_TOPICS.search(query))
         )
-        recovered = recover_corpus_match(
+        recovered, retrieval_path = recover_corpus_match(
             message, query, records, vector_lookup, guides=guide_intent, project_ids=project_ids
         )
         if recovered and recovered["record_type"] == "project":
             matched_projects = [recovered]
         elif recovered:
             guide_candidates = [(1, recovered["record_id"], recovered)]
+    # The first-time buyer guide explicitly covers documents to check before purchase.
+    document_check = terms & {"documents", "paperwork", "certificates", "deeds", "permits"}
+    buying_home = terms & {"buy", "buying", "purchase", "purchasing"} and terms & {
+        "home", "house", "property",
+    }
+    if not guide_candidates and wants_wasalt and not listing_intent and document_check and buying_home:
+        guide_candidates = [
+            (5, row["record_id"], row) for row in records if row.get("record_id") == "guide:buyer-checks"
+        ]
     if project_intent and not matched_projects:
         notes.append("No matching DarGlobal project is in the real property snapshot.")
     if matched_projects:
         if terms & {"price", "pricing", "cost", "asking"}:
             notes.append("The snapshot has no verified asking price for these projects.")
+            abstain = True
         if terms & {"availability", "available", "inventory"}:
             notes.append("The snapshot has no verified current unit availability.")
     ranked = [*matched_projects, *matched_listings, *(match[2] for match in guide_candidates)][:5]
     if not ranked:
-        return SearchResult(" ".join(notes) or "The snapshot has no evidence for that question.")
+        return SearchResult(" ".join(notes) or "The snapshot has no evidence for that question.",
+                            retrieval_path=retrieval_path)
     # Show specific matches and retain weaker candidates only in the retrieval trace.
     best = guide_candidates[0][0] if guide_candidates else 0
     shown = {key for score, key, _ in guide_candidates if score >= best / 2}
@@ -311,6 +328,8 @@ def corpus_search(message, records, *, vector_lookup=None):
             for row in chosen for support in row.get("supporting_sources", []) if valid_citation(support)
         ],
         has_guide=guide_selected,
+        abstain=abstain,
+        retrieval_path=retrieval_path,
     )
 
 
