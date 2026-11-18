@@ -73,6 +73,7 @@ def main():
     retrieval.add_argument("--nvidia", action="store_true", help="Use hosted NVIDIA retrieval and include recovery cases")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--corpus-version", choices=RELEASES, default="v1")
+    parser.add_argument("--corpus-backend", choices=("jsonl", "postgres"), default="jsonl")
     args = parser.parse_args()
     if args.benchmark:
         benchmark_embeddings()
@@ -82,6 +83,7 @@ def main():
         PROPERTY_RETRIEVAL_MODE="nvidia" if args.nvidia else "hybrid" if args.hybrid else "jsonl",
         CHAT_PROVIDER="nvidia" if args.nvidia else "openrouter",
         PROPERTY_CORPUS_VERSION=args.corpus_version,
+        PROPERTY_CORPUS_BACKEND=args.corpus_backend,
     )
     from main import app
 

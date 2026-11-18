@@ -55,8 +55,13 @@ independent read-back compared all fields with the snapshot and confirmed the
 same 37 canonical IDs in Postgres and Qdrant. It also verified the original
 25-point NVIDIA collection against v1.
 
-The chatbot reads text and citation URLs from the selected JSONL. Supabase is
-the synchronized Postgres copy. Qdrant supplies candidate IDs.
+The default backend reads text and citations from JSONL. To serve the corpus
+from Supabase Postgres, set `PROPERTY_CORPUS_BACKEND=postgres` and supply a
+server-side Postgres connection string in `DATABASE_URL`. Qdrant still
+supplies candidate IDs in NVIDIA retrieval mode. The shipped snapshot pins
+the release membership and collection checksum. Postgres supplies the facts,
+aliases, and citations on each request. The app returns HTTP 503 if the database
+read fails or the release is incomplete.
 
 ## Switch the Render snapshot and collection together
 
@@ -79,9 +84,19 @@ QDRANT_URL=<Qdrant HTTPS endpoint>
 QDRANT_API_KEY=<key with read access to the v2 collection>
 ```
 
+For the Postgres-backed configuration, add the following Render settings.
+Use a connection string with read access to `public.property_corpus`.
+The API keys used by Supabase REST clients cannot read this private table.
+
+```dotenv
+PROPERTY_CORPUS_BACKEND=postgres
+DATABASE_URL=<Supabase Postgres connection string>
+```
+
 Use **Save, rebuild, and deploy** so Docker installs the Qdrant dependency.
-Check `/health` for `X-Corpus-Version: v2` and
-`X-Retrieval-Mode: nvidia`. Setting `PROPERTY_CORPUS_VERSION=v1` switches
+For the Postgres configuration, this also installs the Postgres client.
+Check `/health` for `X-Corpus-Version: v2`, `X-Retrieval-Mode: nvidia`,
+and `X-Corpus-Backend: postgres` when enabled. Setting `PROPERTY_CORPUS_VERSION=v1` switches
 back to the original pair. `PROPERTY_RETRIEVAL_MODE=jsonl` uses the selected
 snapshot on its own. [NVIDIA setup](nvidia.md)
 
@@ -90,6 +105,7 @@ python -m unittest discover -s tests -v
 python -m evaluate_corpus --hybrid
 python -m evaluate_corpus --corpus-version v2
 python -m evaluate_corpus --nvidia --corpus-version v2 --live
+python -m evaluate_corpus --nvidia --corpus-version v2 --corpus-backend postgres --live
 ```
 
 The local runs passed 14 unit tests, all 41 v1 MiniLM regression cases, and

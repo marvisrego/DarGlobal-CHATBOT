@@ -39,6 +39,6 @@ class ChatReply(BaseModel):
     mode: Literal["mock", "live"]
     request_id: str
     answer_path: Literal["openrouter", "nvidia", "source_summary", "no_evidence", "abstention"]
-    retrieval_path: Literal["jsonl", "qdrant", "jsonl_after_qdrant_failure"]
+    retrieval_path: Literal["jsonl", "postgres", "qdrant", "jsonl_after_qdrant_failure", "postgres_after_qdrant_failure"]
     inference_model: str | None = None
     inference_provider: Literal["openrouter", "nvidia"] | None = None

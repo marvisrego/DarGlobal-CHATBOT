@@ -16,6 +16,12 @@ RELEASES = {
 }
 
 
+class CorpusUnavailable(Exception):
+    def __init__(self, category):
+        self.category = category
+        super().__init__("The property corpus is temporarily unavailable.")
+
+
 def live_snapshot(version):
     filename = RELEASES[version][0]
     tracked = ROOT / "deploy_data" / filename

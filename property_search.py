@@ -404,13 +404,16 @@ def corpus_search(message, records, *, vector_lookup=None, rerank=None):
     )
 
 
-def search(message, snapshot=None, *, live_data=False, vector_lookup=None, rerank=None):
+def search(message, snapshot=None, *, live_data=False, vector_lookup=None, rerank=None, record_loader=None):
     snapshot = (LIVE_SNAPSHOT if live_data else SNAPSHOT) if snapshot is None else snapshot
     description = "real property" if live_data else "sample property"
-    if not snapshot.is_file():
-        return SearchResult(f"The {description} snapshot is unavailable.")
-    with snapshot.open(encoding="utf-8") as infile:
-        records = [json.loads(line) for line in infile if line.strip()]
+    if record_loader is None:
+        if not snapshot.is_file():
+            return SearchResult(f"The {description} snapshot is unavailable.")
+        with snapshot.open(encoding="utf-8") as infile:
+            records = [json.loads(line) for line in infile if line.strip()]
+    else:
+        records = record_loader()
     mode = "live" if live_data else "synthetic_fixture"
     selected = [record for record in records if record.get("mode") == mode and record.get("title")]
     if live_data:

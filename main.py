@@ -7,14 +7,14 @@ from typing import Annotated
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StringConstraints
 from starlette.concurrency import run_in_threadpool
 
 from answers import ChatReply
-from corpus_snapshot import RELEASES, live_snapshot
+from corpus_snapshot import RELEASES, CorpusUnavailable, live_snapshot
 import nvidia_api
 from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
 from property_search import search
@@ -38,6 +38,11 @@ if CORPUS_VERSION not in RELEASES:
 if DATA_MODE == "live" and CORPUS_VERSION == "v2" and RETRIEVAL_MODE == "hybrid":
     raise RuntimeError("The v2 corpus requires jsonl or nvidia retrieval.")
 corpus_file = live_snapshot(CORPUS_VERSION) if DATA_MODE == "live" else None
+CORPUS_BACKEND = os.getenv("PROPERTY_CORPUS_BACKEND", "jsonl").strip().lower()
+if CORPUS_BACKEND not in {"jsonl", "postgres"}:
+    raise RuntimeError("PROPERTY_CORPUS_BACKEND must be jsonl or postgres.")
+if CORPUS_BACKEND == "postgres" and DATA_MODE != "live":
+    raise RuntimeError("The Postgres corpus requires PROPERTY_DATA_MODE=live.")
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "openrouter").strip().lower()
 if CHAT_PROVIDER not in {"openrouter", "nvidia"}:
     raise RuntimeError("CHAT_PROVIDER must be openrouter or nvidia.")
@@ -51,11 +56,18 @@ def required_setting(name):
     return value
 
 
+postgres_corpus = None
+if CORPUS_BACKEND == "postgres":
+    from corpus_postgres import PostgresCorpus
+
+    postgres_corpus = PostgresCorpus(required_setting("DATABASE_URL"), corpus_file)
+
 vector_lookup = None
 nvidia_retrieval = None
 if RETRIEVAL_MODE in {"hybrid", "nvidia"} and DATA_MODE == "live":
     from hybrid_retrieval import HybridLookup
 
+    structured_backend = "Postgres" if postgres_corpus is not None else "JSONL"
     if RETRIEVAL_MODE == "nvidia":
         nvidia_retrieval = nvidia_api.NvidiaRetrievalAPI(
             required_setting("Nvidia_Embed"), required_setting("Nvidia_rerank")
@@ -65,9 +77,10 @@ if RETRIEVAL_MODE in {"hybrid", "nvidia"} and DATA_MODE == "live":
             limit=nvidia_api.RERANK_LIMIT, embedder=nvidia_retrieval,
             vector_config=nvidia_api.vector_config_for_release(CORPUS_VERSION, corpus_file),
             cooldown=0,
+            structured_backend=structured_backend,
         )
     else:
-        vector_lookup = HybridLookup()
+        vector_lookup = HybridLookup(structured_backend=structured_backend)
 
 answer_provider = None
 if CHAT_MODE == "live":
@@ -98,6 +111,7 @@ async def health(response: Response):
         response.headers["X-Deploy-Commit"] = DEPLOY_COMMIT
     response.headers["X-Retrieval-Mode"] = RETRIEVAL_MODE if vector_lookup is not None else "jsonl"
     response.headers["X-Corpus-Version"] = CORPUS_VERSION if DATA_MODE == "live" else "fixture"
+    response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
     return {"status": "ok"}
 
 
@@ -136,13 +150,24 @@ async def chat(
     response.headers["Cache-Control"] = "no-store"
     request_id = uuid4().hex
     response.headers["X-Request-ID"] = request_id
-    result = await run_in_threadpool(
-        search, request.message, snapshot=corpus_file, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
-        rerank=nvidia_retrieval.rerank if nvidia_retrieval is not None else None,
-    )
+    response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
+    try:
+        result = await run_in_threadpool(
+            search, request.message, snapshot=corpus_file, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
+            rerank=nvidia_retrieval.rerank if nvidia_retrieval is not None else None, record_loader=postgres_corpus,
+        )
+    except CorpusUnavailable as error:
+        LOGGER.warning("chat request_id=%s corpus_backend=postgres error_category=%s", request_id, error.category)
+        raise HTTPException(
+            status_code=503, detail="The property database is temporarily unavailable.",
+            headers={"Cache-Control": "no-store", "X-Request-ID": request_id, "X-Corpus-Backend": "postgres"},
+        ) from None
     inference_model = None
     inference_provider = None
     error_category = None
+    retrieval_path = result.retrieval_path
+    if postgres_corpus is not None:
+        retrieval_path = retrieval_path.replace("jsonl", "postgres")
     answer = "\n\n".join([result.message, *result.facts])
     answer_path = "source_summary"
     if result.abstain:
@@ -163,8 +188,8 @@ async def chat(
             error_category = error.category
             answer = "Source summary (model answer unavailable).\n\n" + answer
     LOGGER.info(
-        "chat request_id=%s answer_path=%s retrieval_path=%s inference_model=%s error_category=%s",
-        request_id, answer_path, result.retrieval_path, inference_model or "-", error_category or "-",
+        "chat request_id=%s corpus_backend=%s answer_path=%s retrieval_path=%s inference_model=%s error_category=%s",
+        request_id, CORPUS_BACKEND, answer_path, retrieval_path, inference_model or "-", error_category or "-",
     )
     return ChatReply(
         answer=answer,
@@ -172,7 +197,7 @@ async def chat(
         mode=CHAT_MODE,
         request_id=request_id,
         answer_path=answer_path,
-        retrieval_path=result.retrieval_path,
+        retrieval_path=retrieval_path,
         inference_model=inference_model,
         inference_provider=inference_provider,
     )
