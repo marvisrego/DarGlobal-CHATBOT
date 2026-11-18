@@ -167,6 +167,54 @@
     ]
   },
   {
+    "id": "transit-acceptance",
+    "kind": "paraphrase",
+    "question": "If I’m house hunting in Riyadh and ride the train to my job, what should I look for near a place I might buy, according to Wasalt?",
+    "expected": ["guide:districts-transit"],
+    "facts": ["metro access to work"],
+    "support": []
+  },
+  {
+    "id": "transit-car-free",
+    "kind": "paraphrase",
+    "question": "I don't drive. What should I check about getting to the office from a home in Riyadh?",
+    "expected": ["guide:districts-transit"],
+    "facts": ["metro access to work"],
+    "support": []
+  },
+  {
+    "id": "transit-train-commute",
+    "kind": "paraphrase",
+    "question": "What should I consider about a train commute while choosing a home in Riyadh?",
+    "expected": ["guide:districts-transit"],
+    "facts": ["metro access to work"],
+    "support": []
+  },
+  {
+    "id": "transit-public-transit",
+    "kind": "paraphrase",
+    "question": "When buying a home in Riyadh, what should I look for if I use public transit to work?",
+    "expected": ["guide:districts-transit"],
+    "facts": ["metro access to work"],
+    "support": []
+  },
+  {
+    "id": "transit-metro-access",
+    "kind": "wasalt",
+    "question": "How should metro access factor into choosing a home in Riyadh?",
+    "expected": ["guide:districts-transit"],
+    "facts": ["metro access to work"],
+    "support": []
+  },
+  {
+    "id": "transit-unrelated-work",
+    "kind": "missing",
+    "question": "I take the train to my job in Riyadh. How can I be more productive at work?",
+    "expected": [],
+    "facts": ["no evidence"],
+    "support": []
+  },
+  {
     "id": "no-listing",
     "kind": "missing",
     "question": "Find Wasalt apartments in Riyadh up to SAR 1 million.",
