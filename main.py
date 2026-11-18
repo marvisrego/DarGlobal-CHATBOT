@@ -14,7 +14,8 @@ from pydantic import BaseModel, StringConstraints
 from starlette.concurrency import run_in_threadpool
 
 from answers import ChatReply
-from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, OpenRouterAnswerProvider
+import nvidia_api
+from openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
 from property_search import search
 
 ROOT = Path(__file__).resolve().parent
@@ -28,22 +29,44 @@ DATA_MODE = os.getenv("PROPERTY_DATA_MODE", "fixture").strip().lower()
 if DATA_MODE not in {"fixture", "live"}:
     raise RuntimeError("PROPERTY_DATA_MODE must be fixture or live.")
 RETRIEVAL_MODE = os.getenv("PROPERTY_RETRIEVAL_MODE", "jsonl").strip().lower()
-if RETRIEVAL_MODE not in {"jsonl", "hybrid"}:
-    raise RuntimeError("PROPERTY_RETRIEVAL_MODE must be jsonl or hybrid.")
+if RETRIEVAL_MODE not in {"jsonl", "hybrid", "nvidia"}:
+    raise RuntimeError("PROPERTY_RETRIEVAL_MODE must be jsonl, hybrid, or nvidia.")
+CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "openrouter").strip().lower()
+if CHAT_PROVIDER not in {"openrouter", "nvidia"}:
+    raise RuntimeError("CHAT_PROVIDER must be openrouter or nvidia.")
 DEPLOY_COMMIT = os.getenv("RENDER_GIT_COMMIT", "")
 
+
+def required_setting(name):
+    value = os.environ.get(name, "").strip()
+    if not value or value == "your_openrouter_api_key_here":
+        raise RuntimeError(f"Set {name} before enabling this mode.")
+    return value
+
+
 vector_lookup = None
-if RETRIEVAL_MODE == "hybrid" and DATA_MODE == "live":
+nvidia_retrieval = None
+if RETRIEVAL_MODE in {"hybrid", "nvidia"} and DATA_MODE == "live":
     from hybrid_retrieval import HybridLookup
 
-    vector_lookup = HybridLookup()
+    if RETRIEVAL_MODE == "nvidia":
+        nvidia_retrieval = nvidia_api.NvidiaRetrievalAPI(
+            required_setting("Nvidia_Embed"), required_setting("Nvidia_rerank")
+        )
+        vector_lookup = HybridLookup(
+            collection=nvidia_api.COLLECTION, limit=nvidia_api.RERANK_LIMIT, embedder=nvidia_retrieval,
+            vector_config={"dimension": nvidia_api.DIMENSION, "embedding": nvidia_api.EMBEDDING},
+            cooldown=0,
+        )
+    else:
+        vector_lookup = HybridLookup()
 
 answer_provider = None
 if CHAT_MODE == "live":
-    key = os.getenv("OPENROUTER_API_KEY", "").strip()
-    if not key or key == "your_openrouter_api_key_here":
-        raise RuntimeError("Set OPENROUTER_API_KEY in .env before enabling live mode.")
-    answer_provider = OpenRouterAnswerProvider(key)
+    if CHAT_PROVIDER == "nvidia":
+        answer_provider = NvidiaAnswerProvider(required_setting("Nvidia_chat"))
+    else:
+        answer_provider = OpenRouterAnswerProvider(required_setting("OPENROUTER_API_KEY"))
 
 
 @asynccontextmanager
@@ -53,6 +76,8 @@ async def lifespan(_app):
     finally:
         if vector_lookup is not None:
             await run_in_threadpool(vector_lookup.close)
+        if nvidia_retrieval is not None:
+            await run_in_threadpool(nvidia_retrieval.close)
 
 
 app = FastAPI(title="Property Research Assistant", lifespan=lifespan)
@@ -63,7 +88,7 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 async def health(response: Response):
     if re.fullmatch(r"[0-9a-f]{40}", DEPLOY_COMMIT):
         response.headers["X-Deploy-Commit"] = DEPLOY_COMMIT
-    response.headers["X-Retrieval-Mode"] = "hybrid" if vector_lookup is not None else "jsonl"
+    response.headers["X-Retrieval-Mode"] = RETRIEVAL_MODE if vector_lookup is not None else "jsonl"
     return {"status": "ok"}
 
 
@@ -76,7 +101,7 @@ async def home():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     if CHAT_MODE == "live":
         html = html.replace('data-mode="mock"', 'data-mode="live"')
-    badge = "OpenRouter" if answer_provider is not None else "Preview"
+    badge = {"nvidia": "NVIDIA", "openrouter": "OpenRouter"}[CHAT_PROVIDER] if answer_provider else "Preview"
     data_label = "Real corpus" if DATA_MODE == "live" else "Sample data"
     html = html.replace("Preview: Real corpus", f"{badge}: {data_label}")
     if DATA_MODE == "live":
@@ -103,9 +128,11 @@ async def chat(
     request_id = uuid4().hex
     response.headers["X-Request-ID"] = request_id
     result = await run_in_threadpool(
-        search, request.message, live_data=DATA_MODE == "live", vector_lookup=vector_lookup
+        search, request.message, live_data=DATA_MODE == "live", vector_lookup=vector_lookup,
+        rerank=nvidia_retrieval.rerank if nvidia_retrieval is not None else None,
     )
     inference_model = None
+    inference_provider = None
     error_category = None
     answer = "\n\n".join([result.message, *result.facts])
     answer_path = "source_summary"
@@ -113,16 +140,19 @@ async def chat(
         answer_path = "abstention"
     elif not result.facts:
         answer_path = "no_evidence"
-    elif answer_provider is not None and result.rankable:
+    elif answer_provider is not None and result.rankable and result.evidence:
         try:
             model = GUIDE_MODEL if result.has_guide else MODEL
-            generated = await answer_provider.generate(request.message, result.facts, result.message, model=model)
-            answer = generated.text
+            if CHAT_PROVIDER == "nvidia":
+                model = nvidia_api.CHAT_MODEL
+            generated = await answer_provider.generate(request.message, result.evidence, model=model)
+            answer = "\n\n".join([generated.text, *result.required_notes])
             inference_model = generated.model
-            answer_path = "openrouter"
+            inference_provider = generated.provider
+            answer_path = generated.provider
         except ModelUnavailable as error:
             error_category = error.category
-            answer = "Source summary (OpenRouter answer unavailable).\n\n" + answer
+            answer = "Source summary (model answer unavailable).\n\n" + answer
     LOGGER.info(
         "chat request_id=%s answer_path=%s retrieval_path=%s inference_model=%s error_category=%s",
         request_id, answer_path, result.retrieval_path, inference_model or "-", error_category or "-",
@@ -135,4 +165,5 @@ async def chat(
         answer_path=answer_path,
         retrieval_path=result.retrieval_path,
         inference_model=inference_model,
+        inference_provider=inference_provider,
     )
