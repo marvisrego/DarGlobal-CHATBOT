@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.data.corpus_snapshot import CorpusUnavailable
-from app.data.listing_pilot import CHEAPEST_FOLLOWUP, LISTING_NOUN, ListingToolArgs, listing_intent
+from app.data.listing_pilot import CHEAPEST_FOLLOWUP, LISTING_LOCATION, LISTING_NOUN, ListingToolArgs, listing_intent
 from app.chat.nvidia_api import CHAT_ENDPOINT, CHAT_MODEL
 from app.chat.openrouter_provider import MODEL_ID, ModelUnavailable, claim_id, generated_answer, http_error_category
 from app.search.property_search import SearchResult, corpus_search, normalized, valid_citation
@@ -24,10 +24,6 @@ PROPERTY_TOPIC = re.compile(
 )
 REFINEMENT = re.compile(r"^(?:only|just|instead|what about|how about|make that|under|below|up to|"
                         r"between|for rent|for sale|near|in)\b")
-LISTING_LOCATION = re.compile(
-    r"\bin\s+([\w'-]+(?:\s+[\w'-]+){0,4}?)(?=\s+(?:under|below|up to|at most|less than|between|"
-    r"with|near|for sale|for rent|and|within|from|that|costing)\b|[?.!,]|$)", re.I,
-)
 RETRY_ANSWER = "I couldn’t verify the property data right now. Please try again in a moment."
 
 

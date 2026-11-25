@@ -9,7 +9,7 @@ from psycopg.rows import dict_row
 from app.data.corpus_snapshot import CorpusUnavailable
 from app.search.hybrid_retrieval import HybridLookup
 from app.data.listing_pilot import (
-    LISTING_FIELDS, Listing, ListingFilters, ListingQuery, collection_name, listing_result, parse_listing_query,
+    LISTING_FIELDS, Listing, ListingFilters, ListingQuery, collection_name, covered_city, listing_result, parse_listing_query,
 )
 from app.chat import nvidia_api
 from app.search.property_search import SearchResult, normalized
@@ -77,6 +77,8 @@ def resolve_filters(message, cities, options, previous):
         "preference": explicit.preference[:250] if explicit.preference else None,
     }
     filters.update({key: value for key, value in fields.items() if value is not None})
+    if city := filters.get("city"):
+        filters["city"] = covered_city(city, cities) or city
     if options.maximum_price is not None and options.strict_maximum is None and explicit.budget is None:
         filters["strict_maximum"] = False
     context = ListingFilters.model_validate(filters)

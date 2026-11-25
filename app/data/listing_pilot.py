@@ -21,6 +21,10 @@ LISTING_FIELDS = (
 )
 LISTING_NOUN = re.compile(r"\b(?:listings?|apartments?|villas?|townhouses?|penthouses?|homes?|units?|studios?)\b")
 SEARCH_TERMS = re.compile(r"\b(?:find|show|search|list|available|for sale|for rent|to buy|to rent|looking for)\b")
+LISTING_LOCATION = re.compile(
+    r"\bin\s+([\w'-]+(?:\s+[\w'-]+){0,4}?)(?=\s+(?:under|below|up to|at most|less than|between|"
+    r"with|near|for sale|for rent|and|within|from|that|costing|please)\b|[?.!,]|$)", re.I,
+)
 PREFERENCE = re.compile(r"\b(?:near|close to|walking distance|walkable|waterfront|quiet|family friendly|with|prefer)\b")
 BUDGET_ALIAS = re.compile(
     r"\b(?:(?:with(?:in)? (?:a )?)?budget of|at or below|within(?=\s+(?:[A-Z]{3}\s*)?\d))\b", re.I,
@@ -165,10 +169,40 @@ def listing_intent(message):
                 or re.search(r"\blistings?\b", query))
 
 
+def single_city_edit(left, right):
+    if len(left) == len(right):
+        different = [i for i, (a, b) in enumerate(zip(left, right)) if a != b]
+        if len(different) == 1:
+            return True
+        if len(different) == 2:
+            first, last = different
+            return last == first + 1 and left[first:last + 1] == right[first:last + 1][::-1]
+        return False
+    shorter, longer = sorted((left, right), key=len)
+    return len(longer) - len(shorter) == 1 and any(
+        longer[:i] + longer[i + 1:] == shorter for i in range(len(longer))
+    )
+
+
+def covered_city(value, cities):
+    city = normalized(value)
+    if city in cities:
+        return city
+    if len(city) < 5:
+        return None
+    matches = [candidate for candidate in cities if len(candidate) >= 5 and single_city_edit(city, candidate)]
+    return matches[0] if len(matches) == 1 else None
+
+
 def parse_listing_query(message, cities, *, require_city=True):
     query = normalized(message)
     matches = sorted((city for city in cities if includes(query, city)), key=len, reverse=True)
     matches = [city for index, city in enumerate(matches) if not any(includes(other, city) for other in matches[:index])]
+    if not matches:
+        location = LISTING_LOCATION.search(message)
+        city = covered_city(location[1] if location else query, cities)
+        if city:
+            matches.append(city)
     if len(matches) > 1 or (require_city and not matches):
         raise ValueError("Include one city covered by the listing pilot.")
     terms = set(query.split())
