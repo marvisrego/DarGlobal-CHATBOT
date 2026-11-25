@@ -9,7 +9,8 @@ from psycopg.rows import dict_row
 from app.data.corpus_snapshot import CorpusUnavailable
 from app.search.hybrid_retrieval import HybridLookup
 from app.data.listing_pilot import (
-    LISTING_FIELDS, Listing, ListingFilters, ListingQuery, collection_name, listing_result, parse_listing_query,
+    LISTING_FIELDS, LISTING_RESULT_LIMIT, Listing, ListingFilters, ListingQuery, collection_name, covered_city,
+    listing_result, parse_listing_query,
 )
 from app.chat import nvidia_api
 from app.search.property_search import SearchResult, normalized
@@ -18,7 +19,6 @@ from app.search.property_search import SearchResult, normalized
 TABLE = "public.property_listing"
 RELEASES = "public.property_listing_release"
 ROW_FIELDS = ("listing_id", "city_key", *LISTING_FIELDS)
-RESULT_LIMIT = 5
 
 
 def database_settings(dsn):
@@ -77,6 +77,8 @@ def resolve_filters(message, cities, options, previous):
         "preference": explicit.preference[:250] if explicit.preference else None,
     }
     filters.update({key: value for key, value in fields.items() if value is not None})
+    if city := filters.get("city"):
+        filters["city"] = covered_city(city, cities) or city
     if options.maximum_price is not None and options.strict_maximum is None and explicit.budget is None:
         filters["strict_maximum"] = False
     context = ListingFilters.model_validate(filters)
@@ -136,11 +138,11 @@ def search_listings(connection, release, message, lookup_for_release, *, previou
             listing_id: eligible[listing_id] for listing_id, _ in (hits or ()) if listing_id in eligible
         }
         if ranked:
-            rows = list(ranked.values())
+            rows = [*ranked.values(), *(row for row in rows if row.listing_id not in ranked)]
             retrieval_path = "qdrant"
         else:
             retrieval_path = "postgres_after_qdrant_failure"
-    result = listing_result(rows[:RESULT_LIMIT], retrieval_path, has_preference=bool(query.preference))
+    result = listing_result(rows[:LISTING_RESULT_LIMIT], retrieval_path, has_preference=bool(query.preference))
     result.listing_context = context
     return result
 
@@ -157,7 +159,7 @@ class PostgresListings:
         self._embedder = embedder
 
     def _lookup(self, digest):
-        return HybridLookup(collection=self._collection, limit=RESULT_LIMIT, embedder=self._embedder,
+        return HybridLookup(collection=self._collection, limit=LISTING_RESULT_LIMIT, embedder=self._embedder,
                             vector_config={**vector_config(digest), "metadata_key": self._metadata_key},
                             cooldown=0, structured_backend="Postgres")
 

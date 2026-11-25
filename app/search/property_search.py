@@ -27,6 +27,11 @@ NUMBER_WORDS = {"studio": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 
 PROPERTY_TYPES = {
     "apartment", "villa", "mansion", "penthouse", "plot", "residence", "house", "townhouse", "studio",
 }
+PROPERTY_SPELLINGS = {
+    "wasalt", "darglobal", "property", "properties", "bedroom", "bedrooms", "listing", "listings",
+    "development", "developments", "mortgage", "mortgages", "neighborhood", "neighbourhood",
+    "under", "below", "between", "million", "thousand", "monthly", "yearly", "available", "search", "waterfront",
+} | {word for name in PROPERTY_TYPES if len(name) >= 5 for word in (name, f"{name}s")}
 PROJECT_NAME_WORDS = {"interiors", "tower", "development", "project", "residences"}
 PROJECT_SCORE_FLOOR = 0.22
 NVIDIA_PROJECT_SCORE_FLOOR = 0.15
@@ -251,6 +256,24 @@ def one_typo(left, right):
     )
 
 
+def correct_property_spelling(message):
+    def correct(match):
+        original = match[0]
+        word = original.casefold()
+        if word in PROPERTY_SPELLINGS or word.removesuffix("s") in PROPERTY_SPELLINGS:
+            return original
+        candidates = [
+            candidate for candidate in PROPERTY_SPELLINGS
+            if one_typo(word, candidate)
+            and (len(word) != len(candidate) or len(word) >= 8 or sorted(word) == sorted(candidate))
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+        return original
+
+    return re.sub(r"\b[^\W\d_]{5,}\b", correct, message)
+
+
 def project_name_evidence(query, record):
     words = query.split()
     for phrase in (record["title"], *record.get("aliases", [])):
@@ -304,6 +327,7 @@ def recover_corpus_match(message, query, records, vector_lookup, *, guide_ids, p
 
 
 def corpus_search(message, records, *, vector_lookup=None, rerank=None):
+    message = correct_property_spelling(message)
     query = normalized(message)
     projects = [row for row in records if row["record_type"] == "project"]
     terms = set(query.split())

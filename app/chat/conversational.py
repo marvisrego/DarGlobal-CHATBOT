@@ -11,10 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.data.corpus_snapshot import CorpusUnavailable
-from app.data.listing_pilot import CHEAPEST_FOLLOWUP, LISTING_NOUN, ListingToolArgs, listing_intent
+from app.data.listing_pilot import CHEAPEST_FOLLOWUP, LISTING_LOCATION, LISTING_NOUN, ListingToolArgs, listing_intent
 from app.chat.nvidia_api import CHAT_ENDPOINT, CHAT_MODEL
 from app.chat.openrouter_provider import MODEL_ID, ModelUnavailable, claim_id, generated_answer, http_error_category
-from app.search.property_search import SearchResult, corpus_search, normalized, valid_citation
+from app.search.property_search import SearchResult, correct_property_spelling, corpus_search, normalized, valid_citation
 
 LOGGER = logging.getLogger("uvicorn.error.darglobal")
 PROPERTY_TOPIC = re.compile(
@@ -24,10 +24,6 @@ PROPERTY_TOPIC = re.compile(
 )
 REFINEMENT = re.compile(r"^(?:only|just|instead|what about|how about|make that|under|below|up to|"
                         r"between|for rent|for sale|near|in)\b")
-LISTING_LOCATION = re.compile(
-    r"\bin\s+([\w'-]+(?:\s+[\w'-]+){0,4}?)(?=\s+(?:under|below|up to|at most|less than|between|"
-    r"with|near|for sale|for rent|and|within|from|that|costing)\b|[?.!,]|$)", re.I,
-)
 RETRY_ANSWER = "I couldn’t verify the property data right now. Please try again in a moment."
 
 
@@ -53,7 +49,10 @@ TOOLS = [
 ]
 ROUTING = (
     "You are DarGlobal's conversational real-estate assistant. Choose exactly one native tool call when the question "
-    "needs property evidence. For 'What properties can I buy?' call search_listings with transaction_type sale "
+    "needs property evidence. Correct obvious misspellings of cities, projects, publishers, and property terms "
+    "in the tool arguments. Preserve every location, number, currency, and price limit the user intended. "
+    "Ask for clarification when an intended correction is ambiguous. "
+    "For 'What properties can I buy?' call search_listings with transaction_type sale "
     "and omit city and other unstated filters. A refinement like 'Only two bedrooms under SAR 900,000' changes "
     "filters in the previous listing search. Set refine_previous true and pass bedrooms, currency, maximum_price "
     "and strict_maximum. A question about the cheapest of the displayed listings uses cheapest_previous true. "
@@ -179,7 +178,7 @@ class PropertyAssistant:
         if not self.web_search:
             return None
         context = result.listing_context if result else None
-        message = request.message
+        message = correct_property_spelling(request.message)
         if context is None and request.previous_question and REFINEMENT.match(normalized(message)):
             message = f"{request.previous_question[:350]} {message}"
         if context:
@@ -206,12 +205,13 @@ class PropertyAssistant:
         return ConversationReply(web, "\n\n".join(filter(None, [intro, web.message, *web.facts])), "web_search")
 
     async def recover(self, client, request, request_id, *, data_unavailable=False, property_question=False):
-        query = normalized(request.message)
+        message = correct_property_spelling(request.message)
+        query = normalized(message)
         context = request.listing_context
         cheapest = bool(CHEAPEST_FOLLOWUP.fullmatch(query))
         refinement = bool(context and REFINEMENT.match(query))
         wants_sale = bool(re.search(r"\b(?:buy|purchase|for sale)\b", query))
-        is_listing = cheapest or refinement or listing_intent(request.message) or (
+        is_listing = cheapest or refinement or listing_intent(message) or (
             bool(LISTING_NOUN.search(query) or re.search(r"\bpropert(?:y|ies)\b", query))
             and bool(re.search(r"\b(?:show|find|buy|rent|available)\b", query))
             and not re.search(r"\b(?:guide|documents|paperwork|advice|how (?:to|do)|darglobal project)\b", query)
@@ -225,18 +225,18 @@ class PropertyAssistant:
                     if cheapest and not request.listing_ids:
                         result = SearchResult("Which listings would you like me to compare?", retrieval_path="postgres")
                     else:
-                        location = LISTING_LOCATION.search(request.message)
+                        location = LISTING_LOCATION.search(message)
                         args = ListingToolArgs(
                             refine_previous=refinement, cheapest_previous=cheapest,
                             city=location[1].strip() if location else None,
                             transaction_type="sale" if wants_sale else None,
                         )
                         result = await run_in_threadpool(
-                            self.listing_search, request.message, options=args, previous=context,
+                            self.listing_search, message, options=args, previous=context,
                             previous_ids=request.listing_ids if cheapest else (),
                         )
                 else:
-                    result = await run_in_threadpool(self.search_knowledge, request.message, request.message, request_id)
+                    result = await run_in_threadpool(self.search_knowledge, message, message, request_id)
             except CorpusUnavailable as error:
                 LOGGER.warning("chat request_id=%s fallback_data=%s", request_id, error.category)
                 data_unavailable = True
@@ -257,8 +257,9 @@ class PropertyAssistant:
 
     async def run(self, request, request_id):
         context = request.listing_context
+        message = correct_property_spelling(request.message)
         messages = [{"role": "system", "content": ROUTING}, {"role": "user", "content": json.dumps({
-            "message": request.message, "previous_question": request.previous_question,
+            "message": message, "previous_question": request.previous_question,
             "last_listing_filters": context.model_dump(mode="json", exclude_none=True) if context else None,
             "has_displayed_listings": bool(request.listing_ids),
         })}]
@@ -270,7 +271,7 @@ class PropertyAssistant:
                     choice = object_reply(turn.get("content")).get("intent")
                     if not isinstance(choice, str) or choice not in SMALL_TALK:
                         raise ModelUnavailable("invalid_assistant_intent")
-                    query = normalized(request.message)
+                    query = normalized(message)
                     if PROPERTY_TOPIC.search(query) or (context and REFINEMENT.match(query)):
                         return await self.recover(client, request, request_id)
                     LOGGER.info("chat request_id=%s intent=%s tools=none", request_id, choice)
@@ -289,7 +290,7 @@ class PropertyAssistant:
                         result = SearchResult("Which listings would you like me to compare?", retrieval_path="postgres")
                     else:
                         result = await run_in_threadpool(
-                            self.listing_search, request.message, options=arguments, previous=context,
+                            self.listing_search, message, options=arguments, previous=context,
                             previous_ids=request.listing_ids if arguments.cheapest_previous else (),
                         )
                     if result.listing_cards and not arguments.cheapest_previous and result.listing_context:
@@ -301,7 +302,7 @@ class PropertyAssistant:
                     LOGGER.info("chat request_id=%s tool=search_listings backend=postgres status=ok rows=%s",
                                 request_id, len(result.listing_cards))
                 else:
-                    result = await run_in_threadpool(self.search_knowledge, request.message, arguments.query, request_id)
+                    result = await run_in_threadpool(self.search_knowledge, message, arguments.query, request_id)
             except CorpusUnavailable as error:
                 LOGGER.warning("chat request_id=%s tool_error=%s", request_id, error.category)
                 return await self.recover(client, request, request_id, data_unavailable=True, property_question=True)
