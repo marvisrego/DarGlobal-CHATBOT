@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.chat.answers import ChatReply
 from app.data.corpus_snapshot import RELEASES, CorpusUnavailable, live_snapshot
-from app.data.listing_pilot import CHEAPEST_FOLLOWUP, ListingFilters, listing_intent
+from app.data.listing_pilot import CHEAPEST_FOLLOWUP, LISTING_RESULT_LIMIT, ListingFilters, listing_intent
 from app.chat import nvidia_api
 from app.chat.openrouter_provider import GUIDE_MODEL, MODEL, ModelUnavailable, NvidiaAnswerProvider, OpenRouterAnswerProvider
 from app.search.property_search import normalized, search
@@ -154,7 +154,7 @@ class ChatRequest(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
     listing_ids: Annotated[list[Annotated[str, StringConstraints(
         pattern=r"^(?:wasalt|darglobal):[a-z0-9][a-z0-9_.:-]{0,119}$",
-    )]], Field(max_length=5)] | None = None
+    )]], Field(max_length=LISTING_RESULT_LIMIT)] | None = None
     listing_context: ListingFilters | None = None
     previous_question: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
 

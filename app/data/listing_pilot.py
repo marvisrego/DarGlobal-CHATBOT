@@ -10,10 +10,14 @@ from urllib.parse import urlsplit
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from app.chat.answers import ListingCard, Source
-from app.search.property_search import BUDGET, BEDROOMS, CURRENCIES, SearchResult, includes, listing_filters, normalized, property_types
+from app.search.property_search import (
+    BUDGET, BEDROOMS, CURRENCIES, SearchResult, correct_property_spelling, includes, listing_filters, normalized,
+    one_typo, property_types,
+)
 
 
 PUBLISHERS = {"darglobal": "Dar Global PLC", "wasalt": "Wasalt"}
+LISTING_RESULT_LIMIT = 10
 RELEASE = re.compile(r"v[1-9][0-9]{0,5}\Z")
 LISTING_FIELDS = (
     "source", "source_id", "source_url", "captured_at", "city", "district", "property_type", "transaction_type",
@@ -161,6 +165,7 @@ def budget_range(message):
 
 
 def listing_intent(message):
+    message = correct_property_spelling(message)
     query = normalized(message)
     if not LISTING_NOUN.search(query) or includes(query, "guide"):
         return False
@@ -169,40 +174,34 @@ def listing_intent(message):
                 or re.search(r"\blistings?\b", query))
 
 
-def single_city_edit(left, right):
-    if len(left) == len(right):
-        different = [i for i, (a, b) in enumerate(zip(left, right)) if a != b]
-        if len(different) == 1:
-            return True
-        if len(different) == 2:
-            first, last = different
-            return last == first + 1 and left[first:last + 1] == right[first:last + 1][::-1]
-        return False
-    shorter, longer = sorted((left, right), key=len)
-    return len(longer) - len(shorter) == 1 and any(
-        longer[:i] + longer[i + 1:] == shorter for i in range(len(longer))
-    )
-
-
 def covered_city(value, cities):
     city = normalized(value)
     if city in cities:
         return city
     if len(city) < 5:
         return None
-    matches = [candidate for candidate in cities if len(candidate) >= 5 and single_city_edit(city, candidate)]
+    matches = [candidate for candidate in cities if len(candidate) >= 5 and one_typo(city, candidate)]
     return matches[0] if len(matches) == 1 else None
 
 
 def parse_listing_query(message, cities, *, require_city=True):
+    message = correct_property_spelling(message)
     query = normalized(message)
     matches = sorted((city for city in cities if includes(query, city)), key=len, reverse=True)
     matches = [city for index, city in enumerate(matches) if not any(includes(other, city) for other in matches[:index])]
     if not matches:
         location = LISTING_LOCATION.search(message)
-        city = covered_city(location[1] if location else query, cities)
-        if city:
-            matches.append(city)
+        if location:
+            city = covered_city(location[1], cities)
+            if city:
+                matches.append(city)
+        else:
+            words = query.split()
+            lengths = {len(city.split()) for city in cities}
+            matches = list({
+                city for length in lengths for start in range(len(words) - length + 1)
+                if (city := covered_city(" ".join(words[start:start + length]), cities))
+            })
     if len(matches) > 1 or (require_city and not matches):
         raise ValueError("Include one city covered by the listing pilot.")
     terms = set(query.split())
