@@ -44,8 +44,9 @@ class ChatReply(BaseModel):
     sources: list[Source]
     mode: Literal["mock", "live"]
     request_id: str
-    answer_path: Literal["openrouter", "nvidia", "source_summary", "no_evidence", "abstention", "tool_failure"]
-    retrieval_path: Literal["none", "jsonl", "postgres", "qdrant", "jsonl_after_qdrant_failure", "postgres_after_qdrant_failure"]
+    answer_path: Literal["openrouter", "nvidia", "source_summary", "no_evidence", "abstention", "tool_failure", "web_search"]
+    retrieval_path: Literal["none", "jsonl", "postgres", "qdrant", "jsonl_after_qdrant_failure",
+                            "postgres_after_qdrant_failure", "web"]
     inference_model: str | None = None
     inference_provider: Literal["openrouter", "nvidia"] | None = None
     listing_ids: list[str] | None = None

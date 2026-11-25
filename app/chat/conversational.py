@@ -4,18 +4,31 @@ import asyncio
 from dataclasses import dataclass
 import json
 import logging
+import re
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from app.data.corpus_snapshot import CorpusUnavailable
-from app.data.listing_pilot import ListingToolArgs
+from app.data.listing_pilot import CHEAPEST_FOLLOWUP, LISTING_NOUN, ListingToolArgs, listing_intent
 from app.chat.nvidia_api import CHAT_ENDPOINT, CHAT_MODEL
 from app.chat.openrouter_provider import MODEL_ID, ModelUnavailable, claim_id, generated_answer, http_error_category
-from app.search.property_search import SearchResult, corpus_search, valid_citation
+from app.search.property_search import SearchResult, corpus_search, normalized, valid_citation
 
 LOGGER = logging.getLogger("uvicorn.error.darglobal")
+PROPERTY_TOPIC = re.compile(
+    r"\b(?:propert(?:y|ies)|real estate|apartments?|villas?|penthouse\w*|townhouse\w*|listings?|"
+    r"darglobal|dar global|wasalt|off plan|ejar|mortgages?|residences?|houses?|condos?|"
+    r"buying a home|home buying|property developers?|rental homes?)\b"
+)
+REFINEMENT = re.compile(r"^(?:only|just|instead|what about|how about|make that|under|below|up to|"
+                        r"between|for rent|for sale|near|in)\b")
+LISTING_LOCATION = re.compile(
+    r"\bin\s+([\w'-]+(?:\s+[\w'-]+){0,4}?)(?=\s+(?:under|below|up to|at most|less than|between|"
+    r"with|near|for sale|for rent|and|within|from|that|costing)\b|[?.!,]|$)", re.I,
+)
+RETRY_ANSWER = "I couldn’t verify the property data right now. Please try again in a moment."
 
 
 class KnowledgeToolArgs(BaseModel):
@@ -95,12 +108,13 @@ def object_reply(content):
 
 
 class PropertyAssistant:
-    def __init__(self, key, listing_search, record_loader, vector_lookup, rerank):
+    def __init__(self, key, listing_search, record_loader, vector_lookup, rerank, *, web_search=None):
         self.key = key
         self.listing_search = listing_search
         self.record_loader = record_loader
         self.vector_lookup = vector_lookup
         self.rerank = rerank
+        self.web_search = web_search
 
     async def complete(self, client, messages, *, tool_choice="auto"):
         payload = {
@@ -113,7 +127,9 @@ class PropertyAssistant:
                 response.raise_for_status()
                 body = response.json()
                 model, choice = body["model"], body["choices"][0]
-                if not isinstance(model, str) or not MODEL_ID.fullmatch(model) or choice["finish_reason"] not in {"stop", "tool_calls"}:
+                if (not isinstance(model, str) or not MODEL_ID.fullmatch(model)
+                        or choice["finish_reason"] not in {"stop", "tool_calls"}
+                        or not isinstance(choice["message"], dict)):
                     raise ModelUnavailable("invalid_assistant_reply")
                 return model, choice["message"]
             except httpx.HTTPStatusError as error:
@@ -159,6 +175,86 @@ class PropertyAssistant:
             result.message = "The sources I have don’t establish that. Is there a specific project or guide you’d like me to check?"
         return result
 
+    async def public_sources(self, client, request, request_id, result=None):
+        if not self.web_search:
+            return None
+        context = result.listing_context if result else None
+        message = request.message
+        if context is None and request.previous_question and REFINEMENT.match(normalized(message)):
+            message = f"{request.previous_question[:350]} {message}"
+        if context:
+            filters = [context.city, context.transaction_type, *(context.property_types or ())]
+            if context.bedrooms is not None:
+                filters.append(f"{context.bedrooms} bedrooms")
+            for label, value in (("minimum", context.minimum_price), ("maximum", context.maximum_price)):
+                if value is not None:
+                    filters.append(f"{label} {context.currency} {value}")
+            message = " ".join([message, *(value for value in filters if value)])
+        try:
+            web = await asyncio.wait_for(
+                self.web_search(client, message[:700], publisher=context.publisher if context else None), timeout=11,
+            )
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, TimeoutError) as error:
+            LOGGER.warning("chat request_id=%s web_search=%s", request_id, type(error).__name__)
+            return None
+        if web is None:
+            LOGGER.info("chat request_id=%s web_search=no_results", request_id)
+            return None
+        web.listing_context = context
+        intro = result.message if result and (result.abstain or not result.facts) else ""
+        LOGGER.info("chat request_id=%s web_search=ok sources=%s", request_id, len(web.sources))
+        return ConversationReply(web, "\n\n".join(filter(None, [intro, web.message, *web.facts])), "web_search")
+
+    async def recover(self, client, request, request_id, *, data_unavailable=False, property_question=False):
+        query = normalized(request.message)
+        context = request.listing_context
+        cheapest = bool(CHEAPEST_FOLLOWUP.fullmatch(query))
+        refinement = bool(context and REFINEMENT.match(query))
+        wants_sale = bool(re.search(r"\b(?:buy|purchase|for sale)\b", query))
+        is_listing = cheapest or refinement or listing_intent(request.message) or (
+            bool(LISTING_NOUN.search(query) or re.search(r"\bpropert(?:y|ies)\b", query))
+            and bool(re.search(r"\b(?:show|find|buy|rent|available)\b", query))
+            and not re.search(r"\b(?:guide|documents|paperwork|advice|how (?:to|do)|darglobal project)\b", query)
+        )
+        result = None
+        if not data_unavailable:
+            if query in {"hi", "hello", "hey", "good morning", "good afternoon", "good evening"}:
+                return ConversationReply(SearchResult("", retrieval_path="none"), SMALL_TALK["greeting"], "source_summary")
+            try:
+                if is_listing:
+                    if cheapest and not request.listing_ids:
+                        result = SearchResult("Which listings would you like me to compare?", retrieval_path="postgres")
+                    else:
+                        location = LISTING_LOCATION.search(request.message)
+                        args = ListingToolArgs(
+                            refine_previous=refinement, cheapest_previous=cheapest,
+                            city=location[1].strip() if location else None,
+                            transaction_type="sale" if wants_sale else None,
+                        )
+                        result = await run_in_threadpool(
+                            self.listing_search, request.message, options=args, previous=context,
+                            previous_ids=request.listing_ids if cheapest else (),
+                        )
+                else:
+                    result = await run_in_threadpool(self.search_knowledge, request.message, request.message, request_id)
+            except CorpusUnavailable as error:
+                LOGGER.warning("chat request_id=%s fallback_data=%s", request_id, error.category)
+                data_unavailable = True
+        in_scope = property_question or is_listing or bool(PROPERTY_TOPIC.search(query))
+        if result and result.facts and not result.abstain:
+            return ConversationReply(result, "\n\n".join([result.message, *result.facts]), "source_summary")
+        if in_scope and not cheapest and (not result or not is_listing or result.listing_context):
+            found = await self.public_sources(client, request, request_id, result)
+            if found:
+                return found
+        if data_unavailable and in_scope:
+            return ConversationReply(SearchResult("", retrieval_path="none"), RETRY_ANSWER, "tool_failure")
+        if result and (in_scope or result.abstain):
+            next_step = [NEXT_STEPS["broaden"]] if result.listing_context and not result.abstain else []
+            return ConversationReply(result, "\n\n".join([result.message, *result.facts, *next_step]),
+                                     "abstention" if result.abstain else "no_evidence")
+        return ConversationReply(SearchResult("", retrieval_path="none"), SMALL_TALK["out_of_scope"], "source_summary")
+
     async def run(self, request, request_id):
         context = request.listing_context
         messages = [{"role": "system", "content": ROUTING}, {"role": "user", "content": json.dumps({
@@ -168,12 +264,15 @@ class PropertyAssistant:
         })}]
         async with httpx.AsyncClient(timeout=httpx.Timeout(14, connect=4)) as client:
             try:
-                model, turn = await self.complete(client, messages)
+                model, turn = await asyncio.wait_for(self.complete(client, messages), timeout=15)
                 calls = turn.get("tool_calls") or []
                 if not calls:
                     choice = object_reply(turn.get("content")).get("intent")
                     if not isinstance(choice, str) or choice not in SMALL_TALK:
                         raise ModelUnavailable("invalid_assistant_intent")
+                    query = normalized(request.message)
+                    if PROPERTY_TOPIC.search(query) or (context and REFINEMENT.match(query)):
+                        return await self.recover(client, request, request_id)
                     LOGGER.info("chat request_id=%s intent=%s tools=none", request_id, choice)
                     return ConversationReply(SearchResult("", retrieval_path="none"), SMALL_TALK[choice], "nvidia", model)
                 if len(calls) != 1:
@@ -205,16 +304,18 @@ class PropertyAssistant:
                     result = await run_in_threadpool(self.search_knowledge, request.message, arguments.query, request_id)
             except CorpusUnavailable as error:
                 LOGGER.warning("chat request_id=%s tool_error=%s", request_id, error.category)
-                return ConversationReply(SearchResult("", retrieval_path="none"),
-                                         "I couldn’t reach the property data right now. Please try again.", "tool_failure")
-            except (ModelUnavailable, KeyError, TypeError, ValueError, AttributeError) as error:
+                return await self.recover(client, request, request_id, data_unavailable=True, property_question=True)
+            except (ModelUnavailable, KeyError, TypeError, ValueError, AttributeError, TimeoutError) as error:
                 LOGGER.warning("chat request_id=%s assistant_error=%s", request_id, getattr(error, "category", "invalid_tool_call"))
-                return ConversationReply(SearchResult("", retrieval_path="none"),
-                                         "I couldn’t complete that request. Please try again.", "tool_failure")
+                return await self.recover(client, request, request_id)
 
             status = "unverified" if result.abstain else "found" if result.facts else "no_results"
             if name == "search_listings" and status == "no_results" and result.listing_context is None:
                 status = "needs_clarification"
+            if status in {"unverified", "no_results"} and not getattr(arguments, "cheapest_previous", False):
+                found = await self.public_sources(client, request, request_id, result)
+                if found:
+                    return found
             messages += [
                 {"role": "assistant", "content": "", "tool_calls": [call]},
                 {"role": "tool", "tool_call_id": tool_id, "name": name, "content": json.dumps({
@@ -226,20 +327,24 @@ class PropertyAssistant:
                 })},
                 {"role": "user", "content": COMPOSE},
             ]
-            return await self.compose(client, messages, result, name, request_id)
+            return await self.compose(client, messages, result, name, request_id, request=request)
 
-    async def compose(self, client, messages, result, name, request_id):
+    async def compose(self, client, messages, result, name, request_id, *, request=None):
         answer = "\n\n".join([result.message, *result.facts])
         path = "abstention" if result.abstain else "source_summary" if result.facts else "no_evidence"
         model = None
         try:
-            selected_model, turn = await self.complete(client, messages, tool_choice="none")
+            selected_model, turn = await asyncio.wait_for(self.complete(client, messages, tool_choice="none"), timeout=13)
             plan = object_reply(turn.get("content"))
             selected = plan.get("claims", [])
             followup = plan.get("next")
             if not isinstance(followup, str) or followup not in NEXT_STEPS or not isinstance(selected, list):
                 raise ModelUnavailable("invalid_assistant_plan")
             if result.evidence and not result.abstain:
+                if not selected and request is not None:
+                    found = await self.public_sources(client, request, request_id)
+                    if found:
+                        return found
                 response = httpx.Response(200, json={"model": selected_model, "choices": [
                     {"finish_reason": "stop", "message": {"content": json.dumps(selected)}},
                 ]})
@@ -258,8 +363,8 @@ class PropertyAssistant:
                     answer = "\n\n".join([result.message, *result.facts, next_step])
                 if result.facts:
                     model, path = selected_model, "nvidia"
-        except ModelUnavailable as error:
-            LOGGER.warning("chat request_id=%s assistant_composition=%s", request_id, error.category)
+        except (ModelUnavailable, TimeoutError) as error:
+            LOGGER.warning("chat request_id=%s assistant_composition=%s", request_id, getattr(error, "category", "timeout"))
             if name == "search_listings" and result.message.startswith("No verified unit listings"):
                 result.message = "\n\n".join([result.message, NEXT_STEPS["broaden"]])
                 answer = result.message
