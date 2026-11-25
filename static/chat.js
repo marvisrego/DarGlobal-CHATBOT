@@ -149,7 +149,10 @@ function renderConversation({ scroll = false, reveal = null } = {}) {
     const reply = element("div", "reply");
     if (turn === reveal) revealedReply = reply;
     reply.append(element("h2", "", "Research assistant"));
-    if (turn.response) {
+    const waiting = pending.get(chat.id) === turn;
+    if (waiting) {
+      reply.append(element("p", "pending", pendingMessage));
+    } else if (turn.response) {
       const cards = turn.response.listing_cards;
       const text = cards?.length ? turn.response.listing_intro
         : turn.response.answer.split("\n").filter((line) => !captureLine.test(line)).join("\n");
@@ -170,10 +173,10 @@ function renderConversation({ scroll = false, reveal = null } = {}) {
         const provider = turn.response.inference_provider === "nvidia" ? "NVIDIA" : "OpenRouter";
         reply.append(element("small", "inference", `${provider} · ${turn.response.inference_model}`));
       }
-    } else if (pending.get(chat.id) === turn) {
-      reply.append(element("p", "pending", pendingMessage));
     } else {
-      reply.append(element("p", "", "The answer didn’t load. Retry to send the same question again."));
+      reply.append(element("p", "", "I couldn’t connect to the property assistant. Retry to send the same question."));
+    }
+    if (!waiting && (!turn.response || turn.response.answer_path === "tool_failure")) {
       const retry = element("button", "retry", "Retry");
       retry.type = "button";
       retry.disabled = pending.has(chat.id);
@@ -224,8 +227,11 @@ async function requestAnswer(chat, turn) {
     });
     if (!response.ok) throw new Error("Chat request failed");
     turn.response = await response.json();
+    if (turn.response.answer_path === "tool_failure") {
+      status = "Property information is temporarily unavailable. Retry is available.";
+    }
   } catch {
-    status = "The answer didn’t load. Retry is available.";
+    status = "Couldn’t connect to the property assistant. Retry is available.";
   } finally {
     pending.delete(chat.id);
     save();

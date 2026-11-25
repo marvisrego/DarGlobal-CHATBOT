@@ -112,9 +112,12 @@ if LISTING_RELEASE:
 property_assistant = None
 if listing_search is not None and CHAT_MODE == "live" and CHAT_PROVIDER == "nvidia":
     from app.chat.conversational import PropertyAssistant
+    from app.search.web_search import FirecrawlSearch
 
+    firecrawl_key = os.getenv("FIRECRAWL_API_KEY", "").strip() or os.getenv("firecrawl", "").strip()
     property_assistant = PropertyAssistant(
         required_setting("Nvidia_chat"), listing_search, postgres_corpus, vector_lookup, nvidia_retrieval.rerank,
+        web_search=FirecrawlSearch(firecrawl_key) if firecrawl_key else None,
     )
 
 
@@ -201,7 +204,14 @@ async def chat(
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Corpus-Backend"] = CORPUS_BACKEND
     if property_assistant is not None:
-        turn = await property_assistant.run(request, request_id)
+        try:
+            turn = await property_assistant.run(request, request_id)
+        except Exception as error:
+            from app.chat.conversational import RETRY_ANSWER
+
+            LOGGER.error("chat request_id=%s conversation_failed=%s", request_id, type(error).__name__)
+            return ChatReply(answer=RETRY_ANSWER, sources=[], mode=CHAT_MODE, request_id=request_id,
+                             answer_path="tool_failure", retrieval_path="none")
         result = turn.result
         context = result.listing_context
         if context or result.listing_cards:
